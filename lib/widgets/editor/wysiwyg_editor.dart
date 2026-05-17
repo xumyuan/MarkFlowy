@@ -73,13 +73,9 @@ class _WysiwygEditorState extends State<WysiwygEditor> {
   @override
   void didUpdateWidget(WysiwygEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // 当外部内容变化时重新初始化（对应 marktext file-changed 事件）
-    if (oldWidget.initialContent != widget.initialContent) {
-      _editorState.dispose();
-      _scrollController.dispose();
-      _initEditor();
-      setState(() {});
-    }
+    // 仅当 key 变化时才重建编辑器（即切换文档时）
+    // 编辑过程中不应因 initialContent 变化而重建，
+    // 否则会导致编辑器状态丢失、光标重置的死循环
   }
 
   @override

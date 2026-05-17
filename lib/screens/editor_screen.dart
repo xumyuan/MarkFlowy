@@ -104,9 +104,12 @@ class _EditorArea extends ConsumerWidget {
   /// 根据当前模式构建对应的编辑器
   Widget _buildEditorByMode(EditorState state, EditorNotifier notifier) {
     return switch (state.mode) {
+      // WYSIWYG 模式：编辑器内部自管理文档状态，仅标记脏状态
+      // 避免 state.markdown 变化触发整个编辑器重建的死循环
       EditorMode.wysiwyg => WysiwygEditor(
+          key: const ValueKey('wysiwyg'),
           initialContent: state.markdown,
-          onContentChanged: (content) => notifier.updateMarkdown(content),
+          onContentChanged: (_) => notifier.updateMarkdown('', markDirtyOnly: true),
         ),
       EditorMode.sourceCode => SourceEditor(
           initialContent: state.markdown,

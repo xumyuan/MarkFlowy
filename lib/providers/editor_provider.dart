@@ -100,8 +100,16 @@ class EditorNotifier extends Notifier<EditorState> {
   }
 
   /// 更新 markdown 内容（编辑器内容变化时调用）
-  void updateMarkdown(String markdown) {
-    state = state.copyWith(markdown: markdown, isModified: true);
+  /// [markDirtyOnly] 为 true 时只标记修改状态，不更新 markdown 文本
+  /// （避免 WYSIWYG 模式下 state 变化导致编辑器重建的死循环）
+  void updateMarkdown(String markdown, {bool markDirtyOnly = false}) {
+    if (markDirtyOnly) {
+      if (!state.isModified) {
+        state = state.copyWith(isModified: true);
+      }
+    } else {
+      state = state.copyWith(markdown: markdown, isModified: true);
+    }
   }
 
   /// 加载文档内容（打开文件或切换标签时）
