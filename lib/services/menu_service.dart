@@ -43,26 +43,34 @@ class MenuService {
     return PlatformMenu(
       label: '文件',
       menus: [
-        _menuItem('file.new-tab', '新建标签'),
-        _menuItem('file.new-window', '新建窗口'),
-        const PlatformMenuItemGroup(members: []),
-        _menuItem('file.open-file', '打开文件'),
-        _menuItem('file.open-folder', '打开文件夹'),
-        const PlatformMenuItemGroup(members: []),
-        _menuItem('file.save', '保存'),
-        _menuItem('file.save-as', '另存为'),
-        const PlatformMenuItemGroup(members: []),
-        _menuItem('file.export-html', '导出为 HTML'),
-        _menuItem('file.export-pdf', '导出为 PDF'),
-        _menuItem('file.print', '打印'),
-        const PlatformMenuItemGroup(members: []),
-        _menuItem('file.close-tab', '关闭标签'),
-        _menuItem('file.close-window', '关闭窗口'),
+        PlatformMenuItemGroup(members: [
+          _menuItem('file.new-tab', '新建标签'),
+          _menuItem('file.new-window', '新建窗口'),
+        ]),
+        PlatformMenuItemGroup(members: [
+          _menuItem('file.open-file', '打开文件'),
+          _menuItem('file.open-folder', '打开文件夹'),
+        ]),
+        PlatformMenuItemGroup(members: [
+          _menuItem('file.save', '保存'),
+          _menuItem('file.save-as', '另存为'),
+        ]),
+        PlatformMenuItemGroup(members: [
+          _menuItem('file.export-html', '导出为 HTML'),
+          _menuItem('file.export-pdf', '导出为 PDF'),
+          _menuItem('file.print', '打印'),
+        ]),
+        PlatformMenuItemGroup(members: [
+          _menuItem('file.close-tab', '关闭标签'),
+          _menuItem('file.close-window', '关闭窗口'),
+        ]),
         if (!Platform.isMacOS) ...[
-          const PlatformMenuItemGroup(members: []),
-          _menuItem('file.preferences', '偏好设置'),
-          const PlatformMenuItemGroup(members: []),
-          _menuItem('file.quit', '退出'),
+          PlatformMenuItemGroup(members: [
+            _menuItem('file.preferences', '偏好设置'),
+          ]),
+          PlatformMenuItemGroup(members: [
+            _menuItem('file.quit', '退出'),
+          ]),
         ],
       ],
     );
@@ -75,26 +83,25 @@ class MenuService {
     return PlatformMenu(
       label: '编辑',
       menus: [
-        _menuItem('edit.undo', '撤销'),
-        _menuItem('edit.redo', '重做'),
-        const PlatformMenuItemGroup(members: []),
-        _menuItem('edit.cut', '剪切'),
-        _menuItem('edit.copy', '复制'),
-        _menuItem('edit.paste', '粘贴'),
-        const PlatformMenuItemGroup(members: []),
-        _menuItem('edit.copy-as-rich', '复制为富文本'),
-        _menuItem('edit.paste-as-plaintext', '粘贴为纯文本'),
-        const PlatformMenuItemGroup(members: []),
-        _menuItem('edit.select-all', '全选'),
-        const PlatformMenuItemGroup(members: []),
-        _menuItem('edit.duplicate', '复制段落'),
-        const PlatformMenuItemGroup(members: []),
-        _menuItem('edit.find', '查找'),
-        _menuItem('edit.find-next', '查找下一个'),
-        _menuItem('edit.find-previous', '查找上一个'),
-        _menuItem('edit.replace', '替换'),
-        const PlatformMenuItemGroup(members: []),
-        _menuItem('edit.find-in-folder', '在文件夹中查找'),
+        PlatformMenuItemGroup(members: [
+          _menuItem('edit.undo', '撤销'),
+          _menuItem('edit.redo', '重做'),
+        ]),
+        PlatformMenuItemGroup(members: [
+          _menuItem('edit.cut', '剪切'),
+          _menuItem('edit.copy', '复制'),
+          _menuItem('edit.paste', '粘贴'),
+        ]),
+        PlatformMenuItemGroup(members: [
+          _menuItem('edit.select-all', '全选'),
+          _menuItem('edit.duplicate', '复制段落'),
+        ]),
+        PlatformMenuItemGroup(members: [
+          _menuItem('edit.find', '查找'),
+          _menuItem('edit.find-next', '查找下一个'),
+          _menuItem('edit.find-previous', '查找上一个'),
+          _menuItem('edit.replace', '替换'),
+        ]),
       ],
     );
   }
@@ -106,28 +113,33 @@ class MenuService {
     return PlatformMenu(
       label: '段落',
       menus: [
-        _menuItem('paragraph.heading-1', '一级标题'),
-        _menuItem('paragraph.heading-2', '二级标题'),
-        _menuItem('paragraph.heading-3', '三级标题'),
-        _menuItem('paragraph.heading-4', '四级标题'),
-        _menuItem('paragraph.heading-5', '五级标题'),
-        _menuItem('paragraph.heading-6', '六级标题'),
-        const PlatformMenuItemGroup(members: []),
-        _menuItem('paragraph.upgrade-heading', '提升标题级别'),
-        _menuItem('paragraph.degrade-heading', '降低标题级别'),
-        const PlatformMenuItemGroup(members: []),
-        _menuItem('paragraph.table', '表格'),
-        _menuItem('paragraph.code-fence', '代码块'),
-        _menuItem('paragraph.quote-block', '引用块'),
-        _menuItem('paragraph.math-formula', '数学公式'),
-        const PlatformMenuItemGroup(members: []),
-        _menuItem('paragraph.order-list', '有序列表'),
-        _menuItem('paragraph.bullet-list', '无序列表'),
-        _menuItem('paragraph.task-list', '任务列表'),
-        const PlatformMenuItemGroup(members: []),
-        _menuItem('paragraph.paragraph', '普通段落'),
-        _menuItem('paragraph.horizontal-line', '水平分割线'),
-        _menuItem('paragraph.front-matter', 'Front Matter'),
+        PlatformMenuItemGroup(members: [
+          _menuItem('paragraph.heading-1', '一级标题'),
+          _menuItem('paragraph.heading-2', '二级标题'),
+          _menuItem('paragraph.heading-3', '三级标题'),
+          _menuItem('paragraph.heading-4', '四级标题'),
+          _menuItem('paragraph.heading-5', '五级标题'),
+          _menuItem('paragraph.heading-6', '六级标题'),
+        ]),
+        PlatformMenuItemGroup(members: [
+          _menuItem('paragraph.upgrade-heading', '提升标题级别'),
+          _menuItem('paragraph.degrade-heading', '降低标题级别'),
+        ]),
+        PlatformMenuItemGroup(members: [
+          _menuItem('paragraph.table', '表格'),
+          _menuItem('paragraph.code-fence', '代码块'),
+          _menuItem('paragraph.quote-block', '引用块'),
+          _menuItem('paragraph.math-formula', '数学公式'),
+        ]),
+        PlatformMenuItemGroup(members: [
+          _menuItem('paragraph.order-list', '有序列表'),
+          _menuItem('paragraph.bullet-list', '无序列表'),
+          _menuItem('paragraph.task-list', '任务列表'),
+        ]),
+        PlatformMenuItemGroup(members: [
+          _menuItem('paragraph.paragraph', '普通段落'),
+          _menuItem('paragraph.horizontal-line', '水平分割线'),
+        ]),
       ],
     );
   }
@@ -139,22 +151,28 @@ class MenuService {
     return PlatformMenu(
       label: '格式',
       menus: [
-        _menuItem('format.strong', '加粗'),
-        _menuItem('format.emphasis', '斜体'),
-        _menuItem('format.underline', '下划线'),
-        const PlatformMenuItemGroup(members: []),
-        _menuItem('format.superscript', '上标'),
-        _menuItem('format.subscript', '下标'),
-        _menuItem('format.highlight', '高亮'),
-        const PlatformMenuItemGroup(members: []),
-        _menuItem('format.inline-code', '行内代码'),
-        _menuItem('format.inline-math', '行内数学公式'),
-        const PlatformMenuItemGroup(members: []),
-        _menuItem('format.strike', '删除线'),
-        _menuItem('format.hyperlink', '超链接'),
-        _menuItem('format.image', '插入图片'),
-        const PlatformMenuItemGroup(members: []),
-        _menuItem('format.clear-format', '清除格式'),
+        PlatformMenuItemGroup(members: [
+          _menuItem('format.strong', '加粗'),
+          _menuItem('format.emphasis', '斜体'),
+          _menuItem('format.underline', '下划线'),
+        ]),
+        PlatformMenuItemGroup(members: [
+          _menuItem('format.superscript', '上标'),
+          _menuItem('format.subscript', '下标'),
+          _menuItem('format.highlight', '高亮'),
+        ]),
+        PlatformMenuItemGroup(members: [
+          _menuItem('format.inline-code', '行内代码'),
+          _menuItem('format.inline-math', '行内数学公式'),
+        ]),
+        PlatformMenuItemGroup(members: [
+          _menuItem('format.strike', '删除线'),
+          _menuItem('format.hyperlink', '超链接'),
+          _menuItem('format.image', '插入图片'),
+        ]),
+        PlatformMenuItemGroup(members: [
+          _menuItem('format.clear-format', '清除格式'),
+        ]),
       ],
     );
   }
@@ -166,15 +184,19 @@ class MenuService {
     return PlatformMenu(
       label: '视图',
       menus: [
-        _menuItem('view.command-palette', '命令面板'),
-        const PlatformMenuItemGroup(members: []),
-        _menuItem('view.source-code-mode', '源码模式'),
-        _menuItem('view.typewriter-mode', '打字机模式'),
-        _menuItem('view.focus-mode', '专注模式'),
-        const PlatformMenuItemGroup(members: []),
-        _menuItem('view.toggle-sidebar', '切换侧边栏'),
-        _menuItem('view.toggle-tabbar', '切换标签栏'),
-        _menuItem('view.toggle-toc', '切换目录'),
+        PlatformMenuItemGroup(members: [
+          _menuItem('view.command-palette', '命令面板'),
+        ]),
+        PlatformMenuItemGroup(members: [
+          _menuItem('view.source-code-mode', '源码模式'),
+          _menuItem('view.typewriter-mode', '打字机模式'),
+          _menuItem('view.focus-mode', '专注模式'),
+        ]),
+        PlatformMenuItemGroup(members: [
+          _menuItem('view.toggle-sidebar', '切换侧边栏'),
+          _menuItem('view.toggle-tabbar', '切换标签栏'),
+          _menuItem('view.toggle-toc', '切换目录'),
+        ]),
       ],
     );
   }
@@ -204,19 +226,22 @@ class MenuService {
     return PlatformMenu(
       label: '帮助',
       menus: [
-        PlatformMenuItem(
-          label: '快捷键参考',
-          onSelected: () => onCommand('help.keybindings'),
-        ),
-        PlatformMenuItem(
-          label: 'Markdown 参考',
-          onSelected: () => onCommand('help.markdown-reference'),
-        ),
-        const PlatformMenuItemGroup(members: []),
-        PlatformMenuItem(
-          label: '关于',
-          onSelected: () => onCommand('help.about'),
-        ),
+        PlatformMenuItemGroup(members: [
+          PlatformMenuItem(
+            label: '快捷键参考',
+            onSelected: () => onCommand('help.keybindings'),
+          ),
+          PlatformMenuItem(
+            label: 'Markdown 参考',
+            onSelected: () => onCommand('help.markdown-reference'),
+          ),
+        ]),
+        PlatformMenuItemGroup(members: [
+          PlatformMenuItem(
+            label: '关于',
+            onSelected: () => onCommand('help.about'),
+          ),
+        ]),
       ],
     );
   }
