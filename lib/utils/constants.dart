@@ -168,8 +168,8 @@ final RegExp kUrlRegExp = RegExp(
 // ============ 应用信息 ============
 
 /// 应用名称
-const String kAppName = 'Flutter Markdown Editor';
+const String kAppName = 'MarkFlowy';
 
 /// GitHub 仓库地址（参考 GITHUB_REPO_URL）
 const String kGithubRepoUrl =
-    'https://github.com/user/flutter_markdown_editor';
+    'https://github.com/user/markflowy';

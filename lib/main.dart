@@ -1,4 +1,4 @@
-/// Flutter Markdown Editor — 应用入口
+/// MarkFlowy — 应用入口
 /// 参考: marktext/src/main/index.js
 ///
 /// 负责初始化:
@@ -28,7 +28,7 @@ void main() async {
       minimumSize: Size(550, 350),
       size: Size(1280, 800),
       center: true,
-      title: 'Flutter Markdown Editor',
+      title: 'MarkFlowy',
       // macOS 使用 hiddenInset 样式标题栏
       titleBarStyle: TitleBarStyle.hidden,
     );

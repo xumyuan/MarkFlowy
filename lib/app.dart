@@ -1,4 +1,4 @@
-/// Flutter Markdown Editor — 应用与路由配置
+/// MarkFlowy — 应用与路由配置
 /// 参考: marktext/src/renderer/src/main.js 和 src/renderer/src/router/index.js
 ///
 /// MarkText 的路由结构:
@@ -81,7 +81,7 @@ class MarkdownEditorApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'Flutter Markdown Editor',
+      title: 'MarkFlowy',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),

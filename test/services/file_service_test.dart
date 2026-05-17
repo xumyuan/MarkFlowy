@@ -4,7 +4,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:flutter_markdown_editor/services/file_service.dart';
+import 'package:markflowy/services/file_service.dart';
 
 void main() {
   late FileService fileService;

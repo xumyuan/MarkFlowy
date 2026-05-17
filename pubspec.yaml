@@ -1,5 +1,5 @@
-name: flutter_markdown_editor
-description: "A Flutter cross-platform Markdown editor inspired by MarkText."
+name: markflowy
+description: "MarkFlowy - A Flutter cross-platform Markdown editor inspired by MarkText."
 publish_to: 'none'
 
 version: 1.0.0+1
