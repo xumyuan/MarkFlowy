@@ -22,7 +22,7 @@ enum EditorMode {
 }
 
 /// 编辑器状态
-class EditorState {
+class AppEditorState {
   /// 当前编辑模式
   final EditorMode mode;
 
@@ -41,7 +41,7 @@ class EditorState {
   /// 当前文档的 markdown 内容
   final String markdown;
 
-  const EditorState({
+  const AppEditorState({
     this.mode = EditorMode.wysiwyg,
     this.activeDocumentId,
     this.isModified = false,
@@ -50,7 +50,7 @@ class EditorState {
     this.markdown = '',
   });
 
-  EditorState copyWith({
+  AppEditorState copyWith({
     EditorMode? mode,
     String? Function()? activeDocumentId,
     bool? isModified,
@@ -58,7 +58,7 @@ class EditorState {
     bool? isTypewriterMode,
     String? markdown,
   }) {
-    return EditorState(
+    return AppEditorState(
       mode: mode ?? this.mode,
       activeDocumentId: activeDocumentId != null
           ? activeDocumentId()
@@ -73,10 +73,10 @@ class EditorState {
 
 /// 编辑器状态 Notifier
 /// 对应 marktext useEditorStore 中的 actions
-class EditorNotifier extends Notifier<EditorState> {
+class EditorNotifier extends Notifier<AppEditorState> {
   @override
-  EditorState build() {
-    return const EditorState();
+  AppEditorState build() {
+    return const AppEditorState();
   }
 
   /// 切换编辑模式
@@ -144,4 +144,4 @@ class EditorNotifier extends Notifier<EditorState> {
 
 /// 编辑器 Provider
 final editorProvider =
-    NotifierProvider<EditorNotifier, EditorState>(EditorNotifier.new);
+    NotifierProvider<EditorNotifier, AppEditorState>(EditorNotifier.new);
