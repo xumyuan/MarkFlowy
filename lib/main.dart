@@ -4,17 +4,20 @@
 /// 负责初始化:
 /// 1. WidgetsFlutterBinding
 /// 2. WindowManager (桌面端窗口配置)
-/// 3. ProviderScope (Riverpod 状态管理)
-/// 4. 启动 App
+/// 3. SettingsService (持久化设置)
+/// 4. ProviderScope (Riverpod 状态管理)
+/// 5. 启动 App
 library;
 
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'app.dart';
+import 'services/settings_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,12 +27,10 @@ void main() async {
     await windowManager.ensureInitialized();
 
     const windowOptions = WindowOptions(
-      // 最小窗口尺寸，参考 marktext editorWinOptions.minWidth/minHeight
       minimumSize: Size(550, 350),
       size: Size(1280, 800),
       center: true,
       title: 'MarkFlowy',
-      // macOS 使用 hiddenInset 样式标题栏
       titleBarStyle: TitleBarStyle.hidden,
     );
 
@@ -39,10 +40,17 @@ void main() async {
     });
   }
 
-  // 使用 ProviderScope 包裹应用，启用 Riverpod 状态管理
+  // 初始化设置服务
+  final prefs = await SharedPreferences.getInstance();
+  final settingsService = SettingsService(prefs);
+
+  // 使用 ProviderScope 包裹应用，override settingsServiceProvider
   runApp(
-    const ProviderScope(
-      child: MarkdownEditorApp(),
+    ProviderScope(
+      overrides: [
+        settingsServiceProvider.overrideWithValue(settingsService),
+      ],
+      child: const MarkdownEditorApp(),
     ),
   );
 }
