@@ -60,6 +60,17 @@ class _WysiwygEditorState extends State<WysiwygEditor> {
         );
       }
     });
+
+    // 初始化后自动设置光标到第一个节点
+    if (widget.autoFocus) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_editorState.document.root.children.isNotEmpty) {
+          _editorState.selection = Selection.collapsed(
+            Position(path: [0]),
+          );
+        }
+      });
+    }
   }
 
   @override
@@ -95,6 +106,7 @@ class _WysiwygEditorState extends State<WysiwygEditor> {
           editorStyle: _buildEditorStyle(context),
           blockComponentBuilders: standardBlockComponentBuilderMap,
           commandShortcutEvents: standardCommandShortcutEvents,
+          footer: _buildFooter(),
         ),
       ),
     );
@@ -115,6 +127,35 @@ class _WysiwygEditorState extends State<WysiwygEditor> {
           height: 1.6,
           color: isDark ? Colors.white : Colors.black87,
         ),
+      ),
+    );
+  }
+
+  /// 底部空白区域，点击时创建新段落并聚焦
+  /// 参考 appflowy_editor 官方 desktop_editor.dart 的 _buildFooter
+  Widget _buildFooter() {
+    return SizedBox(
+      height: 100,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () async {
+          // 如果文档为空，插入一个新段落节点
+          if (_editorState.document.root.children.isEmpty) {
+            final transaction = _editorState.transaction;
+            transaction.insertNode([0], paragraphNode());
+            await _editorState.apply(transaction);
+          }
+          // 聚焦到最后一个节点末尾
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            final lastIndex =
+                _editorState.document.root.children.length - 1;
+            if (lastIndex >= 0) {
+              _editorState.selection = Selection.collapsed(
+                Position(path: [lastIndex]),
+              );
+            }
+          });
+        },
       ),
     );
   }

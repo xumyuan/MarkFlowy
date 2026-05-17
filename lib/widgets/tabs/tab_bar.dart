@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/document.dart';
+import '../../providers/editor_provider.dart';
 
 /// 标签栏状态 — 管理多标签页
 class TabBarState {
@@ -58,9 +59,14 @@ class TabBarNotifier extends Notifier<TabBarState> {
     );
   }
 
-  /// 选中标签（对应 selectFile）
+  /// 选中标签（对应 selectFile）并同步编辑器内容
   void selectTab(String tabId) {
     state = state.copyWith(activeTabId: () => tabId);
+    // 同步加载对应文档内容到编辑器
+    final doc = state.tabs.where((t) => t.id == tabId).firstOrNull;
+    if (doc != null) {
+      ref.read(editorProvider.notifier).loadDocument(doc.id, doc.content);
+    }
   }
 
   /// 新建标签（对应 newFile）
@@ -99,6 +105,42 @@ class TabBarNotifier extends Notifier<TabBarState> {
     final tab = tabs.removeAt(oldIndex);
     tabs.insert(newIndex, tab);
     state = state.copyWith(tabs: tabs);
+  }
+
+  /// 打开文件到新标签页
+  void openFileTab(Document doc) {
+    // 检查是否已存在该文件的标签
+    final existingIndex = state.tabs.indexWhere((t) => t.filePath == doc.filePath && doc.filePath.isNotEmpty);
+    if (existingIndex >= 0) {
+      state = state.copyWith(activeTabId: () => state.tabs[existingIndex].id);
+      return;
+    }
+    state = TabBarState(
+      tabs: [...state.tabs, doc],
+      activeTabId: doc.id,
+    );
+  }
+
+  /// 标记标签为已保存状态
+  void updateTabSaved(String tabId) {
+    final updatedTabs = state.tabs.map((t) {
+      if (t.id == tabId) {
+        return t.copyWith(isSaved: true);
+      }
+      return t;
+    }).toList();
+    state = state.copyWith(tabs: updatedTabs);
+  }
+
+  /// 更新标签的内容（标记为未保存）
+  void updateTabContent(String tabId, String content) {
+    final updatedTabs = state.tabs.map((t) {
+      if (t.id == tabId) {
+        return t.copyWith(content: content, isSaved: false);
+      }
+      return t;
+    }).toList();
+    state = state.copyWith(tabs: updatedTabs);
   }
 }
 

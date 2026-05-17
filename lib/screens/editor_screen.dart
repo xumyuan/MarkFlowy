@@ -20,10 +20,14 @@
 /// - 手机: 抽屉式侧边栏
 library;
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/editor_provider.dart';
+import '../providers/file_provider.dart';
 import '../widgets/common/responsive_layout.dart';
 import '../widgets/editor/editor_toolbar.dart';
 import '../widgets/editor/mode_switcher.dart';
@@ -66,6 +70,7 @@ class EditorScreen extends ConsumerWidget {
 
 /// 构建编辑区域：工具栏 + 编辑器 + 状态栏(模式切换)
 /// 根据当前 EditorMode 显示不同的编辑器组件
+/// 包含 Cmd/Ctrl+S 保存快捷键
 class _EditorArea extends ConsumerWidget {
   const _EditorArea();
 
@@ -74,31 +79,62 @@ class _EditorArea extends ConsumerWidget {
     final editorState = ref.watch(editorProvider);
     final editorNotifier = ref.read(editorProvider.notifier);
 
-    return Column(
-      children: [
-        // 工具栏（仅 WYSIWYG 模式下显示，对应 marktext FormatPicker）
-        if (editorState.mode == EditorMode.wysiwyg)
-          EditorToolbar(
-            onFormatAction: (type) {
-              // TODO: 连接到 appflowy_editor 的 format 操作
-            },
-            onBlockAction: (type) {
-              // TODO: 连接到 appflowy_editor 的 block 操作
-            },
-            onInsertAction: (type) {
-              // TODO: 连接到 appflowy_editor 的插入操作
-            },
-          ),
+    return CallbackShortcuts(
+      bindings: {
+        SingleActivator(
+          LogicalKeyboardKey.keyS,
+          meta: Platform.isMacOS,
+          control: !Platform.isMacOS,
+        ): () => _saveCurrentDocument(ref),
+      },
+      child: Focus(
+        autofocus: true,
+        child: Column(
+          children: [
+            // 工具栏（仅 WYSIWYG 模式下显示，对应 marktext FormatPicker）
+            if (editorState.mode == EditorMode.wysiwyg)
+              EditorToolbar(
+                onFormatAction: (type) {
+                  // TODO: 连接到 appflowy_editor 的 format 操作
+                },
+                onBlockAction: (type) {
+                  // TODO: 连接到 appflowy_editor 的 block 操作
+                },
+                onInsertAction: (type) {
+                  // TODO: 连接到 appflowy_editor 的插入操作
+                },
+              ),
 
-        // 编辑器主体（根据模式切换）
-        Expanded(
-          child: _buildEditorByMode(editorState, editorNotifier),
+            // 编辑器主体（根据模式切换）
+            Expanded(
+              child: _buildEditorByMode(editorState, editorNotifier),
+            ),
+
+            // 底部状态栏：模式切换器
+            _buildStatusBar(context, editorState, editorNotifier),
+          ],
         ),
-
-        // 底部状态栏：模式切换器
-        _buildStatusBar(context, editorState, editorNotifier),
-      ],
+      ),
     );
+  }
+
+  /// 保存当前文档
+  void _saveCurrentDocument(WidgetRef ref) {
+    final tabState = ref.read(tabBarProvider);
+    final activeDoc = tabState.activeDocument;
+    if (activeDoc == null) return;
+
+    // 从 editorProvider 获取最新内容
+    final editorState = ref.read(editorProvider);
+    final docToSave = activeDoc.copyWith(content: editorState.markdown);
+
+    ref.read(fileProvider.notifier).saveFile(docToSave).then((success) {
+      if (success) {
+        ref.read(editorProvider.notifier).markSaved();
+        // 同步标签栏文档状态
+        ref.read(tabBarProvider.notifier).updateTabSaved(activeDoc.id);
+      }
+    });
   }
 
   /// 根据当前模式构建对应的编辑器

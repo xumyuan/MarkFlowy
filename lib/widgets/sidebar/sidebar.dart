@@ -9,6 +9,15 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../providers/editor_provider.dart';
+import '../../providers/file_provider.dart';
+import '../tabs/tab_bar.dart';
+import 'file_tree.dart';
+import 'opened_files.dart';
+import 'sidebar_search.dart';
+import 'toc_panel.dart';
 
 /// 侧边栏面板类型（对应 marktext help.js 中的 sideBarIcons）
 enum SideBarPanel {
@@ -195,9 +204,7 @@ class _SideBarState extends ConsumerState<SideBar> {
             icon: Icons.settings_outlined,
             tooltip: '设置',
             isActive: false,
-            onTap: () {
-              // TODO: 打开设置页面
-            },
+            onTap: () => GoRouter.of(context).push('/settings'),
           ),
           const SizedBox(height: 12),
         ],
@@ -215,33 +222,71 @@ class _SideBarState extends ConsumerState<SideBar> {
           // 顶部留空
           const SizedBox(height: 40),
 
-          // 面板标题
+          // 面板标题 + 操作按钮
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Text(
-              _getPanelTitle(state.selectedPanel!),
-              style: theme.textTheme.labelLarge?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+            child: Row(
+              children: [
+                Text(
+                  _getPanelTitle(state.selectedPanel!),
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Spacer(),
+                // 文件面板顶部的打开按钮
+                if (state.selectedPanel == SideBarPanel.files) ...[
+                  _PanelActionButton(
+                    icon: Icons.create_new_folder_outlined,
+                    tooltip: '打开文件夹',
+                    onTap: () => ref.read(fileProvider.notifier).openFolder(),
+                  ),
+                  const SizedBox(width: 4),
+                  _PanelActionButton(
+                    icon: Icons.note_add_outlined,
+                    tooltip: '打开文件',
+                    onTap: () async {
+                      final doc = await ref.read(fileProvider.notifier).openFile();
+                      if (doc != null) {
+                        ref.read(tabBarProvider.notifier).openFileTab(doc);
+                        ref.read(editorProvider.notifier).loadDocument(doc.id, doc.content);
+                      }
+                    },
+                  ),
+                ],
+              ],
             ),
           ),
 
           const Divider(height: 1),
 
-          // 面板内容占位
+          // 面板内容
           Expanded(
-            child: Center(
-              child: Text(
-                _getPanelPlaceholder(state.selectedPanel!),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                ),
-              ),
-            ),
+            child: _buildPanelContent(state.selectedPanel!),
           ),
         ],
       ),
     );
+  }
+
+  /// 根据面板类型构建实际内容组件
+  Widget _buildPanelContent(SideBarPanel panel) {
+    switch (panel) {
+      case SideBarPanel.files:
+        return const Column(
+          children: [
+            // 已打开文件列表
+            SizedBox(height: 120, child: OpenedFilesPanel()),
+            Divider(height: 1),
+            // 文件树
+            Expanded(child: FileTreePanel()),
+          ],
+        );
+      case SideBarPanel.search:
+        return const SidebarSearchPanel();
+      case SideBarPanel.toc:
+        return const TocPanel();
+    }
   }
 
   /// 构建拖拽把手（对应 marktext drag-bar）
@@ -284,17 +329,38 @@ class _SideBarState extends ConsumerState<SideBar> {
         return '目录';
     }
   }
+}
 
-  /// 获取面板占位文本
-  String _getPanelPlaceholder(SideBarPanel panel) {
-    switch (panel) {
-      case SideBarPanel.files:
-        return '打开文件夹以查看文件树';
-      case SideBarPanel.search:
-        return '输入关键词搜索';
-      case SideBarPanel.toc:
-        return '打开文档后显示目录';
-    }
+/// 面板标题栏操作按钮
+class _PanelActionButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  const _PanelActionButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: Icon(
+            icon,
+            size: 16,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+          ),
+        ),
+      ),
+    );
   }
 }
 

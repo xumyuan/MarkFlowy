@@ -32,8 +32,14 @@ class MarkdownUtils {
 
   /// 创建一个空白文档（包含一个空段落）
   /// 对应 marktext 中新建文件时的初始状态
+  /// 确保文档至少有一个 paragraph 节点，以便 appflowy_editor 能正常获取焦点
   static Document createEmptyDocument() {
-    return Document.blank();
+    final doc = Document.blank();
+    // Document.blank() 可能创建没有子节点的空文档，确保至少有一个段落节点
+    if (doc.root.children.isEmpty) {
+      doc.insert([0], [paragraphNode()]);
+    }
+    return doc;
   }
 
   /// 从 Markdown 内容创建带有初始光标位置的文档

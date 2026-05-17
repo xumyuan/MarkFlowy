@@ -14,8 +14,10 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../providers/editor_provider.dart';
 import '../../providers/file_provider.dart';
 import '../../services/file_service.dart';
+import '../tabs/tab_bar.dart';
 
 /// 文件树面板组件（对应 marktext tree.vue）
 class FileTreePanel extends ConsumerWidget {
@@ -427,9 +429,14 @@ class _FileNode extends ConsumerWidget {
     final indent = depth * 16.0 + 8.0;
 
     return InkWell(
-      onTap: () {
+      onTap: () async {
         if (node.isMarkdown) {
-          ref.read(fileProvider.notifier).openFile(node.pathname);
+          // 打开文件 → 创建 Document → 添加 tab → 加载到编辑器
+          final doc = await ref.read(fileProvider.notifier).openFile(node.pathname);
+          if (doc != null) {
+            ref.read(tabBarProvider.notifier).openFileTab(doc);
+            ref.read(editorProvider.notifier).loadDocument(doc.id, doc.content);
+          }
         }
       },
       onSecondaryTap: () => _showContextMenu(context, ref),
