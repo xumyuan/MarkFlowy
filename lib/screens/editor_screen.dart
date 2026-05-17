@@ -102,7 +102,7 @@ class _EditorArea extends ConsumerWidget {
   }
 
   /// 根据当前模式构建对应的编辑器
-  Widget _buildEditorByMode(EditorState state, EditorNotifier notifier) {
+  Widget _buildEditorByMode(AppEditorState state, EditorNotifier notifier) {
     return switch (state.mode) {
       // WYSIWYG 模式：编辑器内部自管理文档状态，仅标记脏状态
       // 避免 state.markdown 变化触发整个编辑器重建的死循环
@@ -125,7 +125,7 @@ class _EditorArea extends ConsumerWidget {
   /// 构建底部状态栏（包含模式切换器）
   Widget _buildStatusBar(
     BuildContext context,
-    EditorState state,
+    AppEditorState state,
     EditorNotifier notifier,
   ) {
     final theme = Theme.of(context);

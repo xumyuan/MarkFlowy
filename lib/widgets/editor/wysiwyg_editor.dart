@@ -95,20 +95,26 @@ class _WysiwygEditorState extends State<WysiwygEditor> {
       editorScrollController: _scrollController,
       textDirection: TextDirection.ltr,
       style: _buildToolbarStyle(context),
-      child: AppFlowyEditor(
-        editorState: _editorState,
-        editorScrollController: _scrollController,
-        autoFocus: widget.autoFocus,
-        editorStyle: _buildEditorStyle(context),
-        // Slash command: 输入 / 弹出块插入菜单（对应 muya quickInsert）
-        characterShortcutEvents: [
-          slashCommand,
-          ...standardCharacterShortcutEvents,
-        ],
-        // 键盘快捷键（对应 muya formatCtrl 中的快捷键）
-        commandShortcutEvents: standardCommandShortcutEvents,
-        // 块组件（对应 muya 各种 block 类型）
-        blockComponentBuilders: _buildBlockComponentBuilders(),
+      child: Directionality(
+        textDirection: TextDirection.ltr,
+        child: AppFlowyEditor(
+          editorState: _editorState,
+          editorScrollController: _scrollController,
+          autoFocus: widget.autoFocus,
+          editorStyle: _buildEditorStyle(context),
+          // Slash command: 输入 / 弹出块插入菜单（对应 muya quickInsert）
+          characterShortcutEvents: [
+            slashCommand,
+            ...standardCharacterShortcutEvents,
+          ],
+          // 键盘快捷键（对应 muya formatCtrl 中的快捷键）
+          commandShortcutEvents: standardCommandShortcutEvents,
+          // 块组件（对应 muya 各种 block 类型）
+          // 使用完整的标准块组件构建器映射，包括代码块、表格等高级元素
+          blockComponentBuilders: {
+            ...standardBlockComponentBuilderMap,
+          },
+        ),
       ),
     );
   }
@@ -163,48 +169,6 @@ class _WysiwygEditorState extends State<WysiwygEditor> {
         ),
       ),
     );
-  }
-
-  /// 构建块组件（对应 muya 的各种 block 类型）
-  Map<String, BlockComponentBuilder> _buildBlockComponentBuilders() {
-    final configuration = BlockComponentConfiguration(
-      padding: (_) => const EdgeInsets.symmetric(vertical: 2),
-    );
-
-    return {
-      // 段落（对应 muya paragraphCtrl）
-      ParagraphBlockKeys.type: ParagraphBlockComponentBuilder(
-        configuration: configuration,
-      ),
-      // 标题 H1~H6（对应 muya paragraphCtrl 中的 heading）
-      HeadingBlockKeys.type: HeadingBlockComponentBuilder(
-        configuration: configuration,
-      ),
-      // 引用块（对应 muya paragraphCtrl 中的 blockquote）
-      QuoteBlockKeys.type: QuoteBlockComponentBuilder(
-        configuration: configuration,
-      ),
-      // 无序列表
-      BulletedListBlockKeys.type: BulletedListBlockComponentBuilder(
-        configuration: configuration,
-      ),
-      // 有序列表
-      NumberedListBlockKeys.type: NumberedListBlockComponentBuilder(
-        configuration: configuration,
-      ),
-      // 待办列表（对应 muya 的 task list）
-      TodoListBlockKeys.type: TodoListBlockComponentBuilder(
-        configuration: configuration,
-      ),
-      // 分割线
-      DividerBlockKeys.type: DividerBlockComponentBuilder(
-        configuration: configuration,
-      ),
-      // 图片块（对应 muya imageCtrl）
-      ImageBlockKeys.type: ImageBlockComponentBuilder(
-        configuration: configuration,
-      ),
-    };
   }
 
   /// 获取当前文档的 Markdown 内容
