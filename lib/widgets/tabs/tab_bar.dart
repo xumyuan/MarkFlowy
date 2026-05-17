@@ -12,10 +12,13 @@ library;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 
 import '../../models/document.dart';
 import '../../providers/editor_provider.dart';
+import '../../services/file_service.dart';
 
 /// 标签栏状态 — 管理多标签页
 class TabBarState {
@@ -142,6 +145,20 @@ class TabBarNotifier extends Notifier<TabBarState> {
     }).toList();
     state = state.copyWith(tabs: updatedTabs);
   }
+
+  /// 重命名标签（更新文件名和路径）
+  void renameTab(String tabId, String newName, String? newPath) {
+    final updatedTabs = state.tabs.map((t) {
+      if (t.id == tabId) {
+        return t.copyWith(
+          filename: newName,
+          filePath: newPath ?? t.filePath,
+        );
+      }
+      return t;
+    }).toList();
+    state = state.copyWith(tabs: updatedTabs);
+  }
 }
 
 /// 标签栏 Provider
@@ -226,7 +243,8 @@ class EditorTabBar extends ConsumerWidget {
 }
 
 /// 单个标签项（对应 tabs.vue 中的 li 元素）
-class _TabItem extends StatefulWidget {
+/// 支持双击重命名
+class _TabItem extends ConsumerStatefulWidget {
   final Document tab;
   final bool isActive;
   final VoidCallback onSelect;
@@ -240,11 +258,88 @@ class _TabItem extends StatefulWidget {
   });
 
   @override
-  State<_TabItem> createState() => _TabItemState();
+  ConsumerState<_TabItem> createState() => _TabItemState();
 }
 
-class _TabItemState extends State<_TabItem> {
+class _TabItemState extends ConsumerState<_TabItem> {
   bool _isHovered = false;
+  bool _isEditing = false;
+  late TextEditingController _renameController;
+  final FocusNode _renameFocusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _renameController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _renameController.dispose();
+    _renameFocusNode.dispose();
+    super.dispose();
+  }
+
+  /// 进入重命名编辑模式
+  void _startEditing() {
+    // 预填文件名（不含扩展名）
+    final nameWithoutExt = p.basenameWithoutExtension(widget.tab.filename);
+    _renameController.text = nameWithoutExt;
+    setState(() => _isEditing = true);
+    // 延迟聚焦并全选
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _renameFocusNode.requestFocus();
+      _renameController.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: nameWithoutExt.length,
+      );
+    });
+  }
+
+  /// 确认重命名
+  void _confirmRename() {
+    if (!_isEditing) return;
+    final newName = _renameController.text.trim();
+    if (newName.isEmpty) {
+      _cancelEditing();
+      return;
+    }
+
+    // 保留原扩展名
+    final ext = p.extension(widget.tab.filename);
+    final newFilename = '$newName$ext';
+
+    if (newFilename == widget.tab.filename) {
+      _cancelEditing();
+      return;
+    }
+
+    // 如果文件已保存到磁盘，执行物理重命名
+    if (widget.tab.filePath.isNotEmpty) {
+      final fileService = FileService();
+      fileService.rename(widget.tab.filePath, newFilename).then((newPath) {
+        ref.read(tabBarProvider.notifier).renameTab(
+              widget.tab.id,
+              newFilename,
+              newPath,
+            );
+      });
+    } else {
+      // 未保存文件只更新显示名
+      ref.read(tabBarProvider.notifier).renameTab(
+            widget.tab.id,
+            newFilename,
+            null,
+          );
+    }
+
+    setState(() => _isEditing = false);
+  }
+
+  /// 取消编辑
+  void _cancelEditing() {
+    setState(() => _isEditing = false);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -262,6 +357,7 @@ class _TabItemState extends State<_TabItem> {
         onExit: (_) => setState(() => _isHovered = false),
         child: GestureDetector(
           onTap: widget.onSelect,
+          onDoubleTap: _startEditing,
           child: Container(
             constraints: const BoxConstraints(maxWidth: 180),
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -284,28 +380,73 @@ class _TabItemState extends State<_TabItem> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // 文件名
+                // 文件名或重命名输入框
                 Flexible(
-                  child: Text(
-                    widget.tab.filename,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: widget.isActive
-                          ? theme.colorScheme.onSurface
-                          : theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                  ),
+                  child: _isEditing
+                      ? _buildRenameField(theme)
+                      : Text(
+                          widget.tab.filename,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: widget.isActive
+                                ? theme.colorScheme.onSurface
+                                : theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
                 ),
 
                 const SizedBox(width: 4),
 
                 // 关闭按钮或未保存圆点
-                _buildCloseOrDot(theme),
+                if (!_isEditing) _buildCloseOrDot(theme),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  /// 构建重命名输入框
+  Widget _buildRenameField(ThemeData theme) {
+    return KeyboardListener(
+      focusNode: FocusNode(),
+      onKeyEvent: (event) {
+        if (event is KeyDownEvent) {
+          if (event.logicalKey == LogicalKeyboardKey.escape) {
+            _cancelEditing();
+          }
+        }
+      },
+      child: SizedBox(
+        width: 120,
+        height: 22,
+        child: TextField(
+          controller: _renameController,
+          focusNode: _renameFocusNode,
+          style: TextStyle(
+            fontSize: 12,
+            color: theme.colorScheme.onSurface,
+          ),
+          decoration: InputDecoration(
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 4,
+              vertical: 4,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(3),
+              borderSide: BorderSide(color: theme.colorScheme.primary),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(3),
+              borderSide: BorderSide(color: theme.colorScheme.primary),
+            ),
+          ),
+          onSubmitted: (_) => _confirmRename(),
+          onTapOutside: (_) => _confirmRename(),
         ),
       ),
     );

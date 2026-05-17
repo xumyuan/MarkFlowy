@@ -10,6 +10,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../utils/strings.dart';
 import '../../widgets/tabs/tab_bar.dart';
 
 /// TOC 条目数据
@@ -87,7 +88,7 @@ class TocPanel extends ConsumerWidget {
     if (entries.isEmpty) {
       return Center(
         child: Text(
-          '打开文档后显示目录',
+          AppStrings.tocHint,
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
           ),

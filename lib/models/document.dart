@@ -6,6 +6,8 @@
 /// 这里翻译为 Dart 中的不可变数据模型。
 library;
 
+import '../utils/strings.dart';
+
 /// 单个文档（标签页）的状态
 /// 对应 marktext buffer store 中 tabs 数组的每一项
 class Document {
@@ -54,7 +56,7 @@ class Document {
   const Document({
     required this.id,
     this.filePath = '',
-    this.filename = 'Untitled',
+    this.filename = AppStrings.newDocumentTitle,
     this.content = '',
     this.isSaved = true,
     this.encoding = 'utf8',

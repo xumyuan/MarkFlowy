@@ -37,6 +37,7 @@ dependencies:
   # UI
   fluent_ui: ^4.8.0
   cupertino_icons: ^1.0.6
+  desktop_drop: ^0.7.1
 
 dev_dependencies:
   flutter_test:

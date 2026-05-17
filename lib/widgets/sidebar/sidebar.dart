@@ -13,6 +13,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../providers/editor_provider.dart';
 import '../../providers/file_provider.dart';
+import '../../utils/strings.dart';
 import '../tabs/tab_bar.dart';
 import 'file_tree.dart';
 import 'opened_files.dart';
@@ -322,11 +323,11 @@ class _SideBarState extends ConsumerState<SideBar> {
   String _getPanelTitle(SideBarPanel panel) {
     switch (panel) {
       case SideBarPanel.files:
-        return '文件';
+        return AppStrings.filesPanelTitle;
       case SideBarPanel.search:
-        return '搜索';
+        return AppStrings.searchPanelTitle;
       case SideBarPanel.toc:
-        return '目录';
+        return AppStrings.tocPanelTitle;
     }
   }
 }

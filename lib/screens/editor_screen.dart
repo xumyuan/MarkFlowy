@@ -22,13 +22,17 @@ library;
 
 import 'dart:io';
 
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 
+import '../models/document.dart';
 import '../providers/editor_provider.dart';
 import '../providers/file_provider.dart';
 import '../providers/search_provider.dart';
+import '../utils/strings.dart';
 import '../widgets/command_palette.dart';
 import '../widgets/common/responsive_layout.dart';
 import '../widgets/editor/mode_switcher.dart';
@@ -235,7 +239,7 @@ class _EditorArea extends ConsumerWidget {
           // 左侧：文档修改状态
           if (state.isModified)
             Text(
-              '已修改',
+              AppStrings.modified,
               style: TextStyle(
                 fontSize: 11,
                 color: theme.colorScheme.primary,
@@ -254,56 +258,130 @@ class _EditorArea extends ConsumerWidget {
 }
 
 /// 桌面布局（对应 marktext editor-container 的默认宽屏布局）
-class _DesktopLayout extends StatelessWidget {
+/// 支持拖拽 .md/.markdown/.txt 文件到编辑器打开
+class _DesktopLayout extends ConsumerStatefulWidget {
   final String? filename;
   final bool isSaved;
 
   const _DesktopLayout({this.filename, this.isSaved = true});
 
   @override
+  ConsumerState<_DesktopLayout> createState() => _DesktopLayoutState();
+}
+
+class _DesktopLayoutState extends ConsumerState<_DesktopLayout> {
+  /// 是否正在拖拽文件到窗口上
+  bool _isDragging = false;
+
+  /// 支持的文件扩展名
+  static const _supportedExtensions = ['.md', '.markdown', '.txt'];
+
+  @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        // 主布局
-        Column(
-          children: [
-            // 标题栏（对应 marktext title-bar，在 editor-middle 内）
-            TitleBar(
-              filename: filename,
-              isSaved: isSaved,
-            ),
+    final theme = Theme.of(context);
 
-            // 主体区域：侧边栏 + 编辑区
-            Expanded(
-              child: Row(
-                children: [
-                  // 侧边栏（对应 marktext side-bar）
-                  const SideBar(),
+    return DropTarget(
+      onDragEntered: (_) => setState(() => _isDragging = true),
+      onDragExited: (_) => setState(() => _isDragging = false),
+      onDragDone: (details) {
+        setState(() => _isDragging = false);
+        _handleDroppedFiles(details);
+      },
+      child: Stack(
+        children: [
+          // 主布局
+          Column(
+            children: [
+              // 标题栏（对应 marktext title-bar，在 editor-middle 内）
+              TitleBar(
+                filename: widget.filename,
+                isSaved: widget.isSaved,
+              ),
 
-                  // 编辑器中间区域（对应 editor-middle）
-                  const Expanded(
-                    child: Column(
-                      children: [
-                        // 标签栏（对应 editorWithTabs/tabs）
-                        EditorTabBar(),
+              // 主体区域：侧边栏 + 编辑区
+              Expanded(
+                child: Row(
+                  children: [
+                    // 侧边栏（对应 marktext side-bar）
+                    const SideBar(),
 
-                        // 编辑区域：编辑器 + 状态栏
-                        Expanded(
-                          child: _EditorArea(),
-                        ),
-                      ],
+                    // 编辑器中间区域（对应 editor-middle）
+                    const Expanded(
+                      child: Column(
+                        children: [
+                          // 标签栏（对应 editorWithTabs/tabs）
+                          EditorTabBar(),
+
+                          // 编辑区域：编辑器 + 状态栏
+                          Expanded(
+                            child: _EditorArea(),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          // 命令面板（overlay 覆盖层）
+          const CommandPalette(),
+
+          // 拖拽视觉反馈遮罩
+          if (_isDragging)
+            Positioned.fill(
+              child: Container(
+                color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 32,
+                      vertical: 16,
+                    ),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.9),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      AppStrings.dropToOpen,
+                      style: TextStyle(
+                        color: theme.colorScheme.onPrimary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
-                ],
+                ),
               ),
             ),
-          ],
-        ),
-
-        // 命令面板（overlay 覆盖层）
-        const CommandPalette(),
-      ],
+        ],
+      ),
     );
+  }
+
+  /// 处理拖拽释放的文件
+  void _handleDroppedFiles(DropDoneDetails details) {
+    for (final xFile in details.files) {
+      final path = xFile.path;
+      final ext = p.extension(path).toLowerCase();
+      if (!_supportedExtensions.contains(ext)) continue;
+
+      // 读取文件内容并打开为新标签
+      File(path).readAsString().then((content) {
+        final doc = Document(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          filePath: path,
+          filename: p.basename(path),
+          content: content,
+          isSaved: true,
+          createdAt: DateTime.now(),
+          lastModifiedAt: DateTime.now(),
+        );
+        ref.read(tabBarProvider.notifier).openFileTab(doc);
+        ref.read(editorProvider.notifier).loadDocument(doc.id, content);
+      });
+    }
   }
 }
 
