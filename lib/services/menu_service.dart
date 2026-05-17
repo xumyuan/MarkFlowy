@@ -52,6 +52,10 @@ class MenuService {
         _menuItem('file.save', '保存'),
         _menuItem('file.save-as', '另存为'),
         const PlatformMenuItemGroup(members: []),
+        _menuItem('file.export-html', '导出为 HTML'),
+        _menuItem('file.export-pdf', '导出为 PDF'),
+        _menuItem('file.print', '打印'),
+        const PlatformMenuItemGroup(members: []),
         _menuItem('file.close-tab', '关闭标签'),
         _menuItem('file.close-window', '关闭窗口'),
         if (!Platform.isMacOS) ...[

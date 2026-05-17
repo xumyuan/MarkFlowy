@@ -7,7 +7,7 @@
 /// ├──────┬──────────────────────────────────────────────┤
 /// │      │              标签栏 (TabBar)                   │
 /// │ 侧边 ├──────────────────────────────────────────────┤
-/// │  栏  │            工具栏 (EditorToolbar)              │
+/// │  栏  │          搜索替换栏 (SearchReplaceBar)         │
 /// │      ├──────────────────────────────────────────────┤
 /// │      │              编辑区 (Editor)                   │
 /// │      │                                               │
@@ -15,7 +15,7 @@
 /// │      │            状态栏 (ModeSwitcher)               │
 /// └──────┴──────────────────────────────────────────────┘
 ///
-/// - 桌面: 完整侧边栏 + 标签栏
+/// - 桌面: 完整侧边栏 + 标签栏 + 命令面板 overlay
 /// - 平板: 可收起侧边栏
 /// - 手机: 抽屉式侧边栏
 library;
@@ -28,12 +28,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/editor_provider.dart';
 import '../providers/file_provider.dart';
+import '../providers/search_provider.dart';
+import '../widgets/command_palette.dart';
 import '../widgets/common/responsive_layout.dart';
-import '../widgets/editor/editor_toolbar.dart';
 import '../widgets/editor/mode_switcher.dart';
 import '../widgets/editor/source_editor.dart';
 import '../widgets/editor/split_view.dart';
 import '../widgets/editor/wysiwyg_editor.dart';
+import '../widgets/search/search_replace_bar.dart';
 import '../widgets/sidebar/sidebar.dart';
 import '../widgets/tabs/tab_bar.dart';
 import '../widgets/titlebar/title_bar.dart';
@@ -68,9 +70,9 @@ class EditorScreen extends ConsumerWidget {
   }
 }
 
-/// 构建编辑区域：工具栏 + 编辑器 + 状态栏(模式切换)
+/// 构建编辑区域：搜索栏 + 编辑器 + 状态栏(模式切换)
 /// 根据当前 EditorMode 显示不同的编辑器组件
-/// 包含 Cmd/Ctrl+S 保存快捷键
+/// 包含应用级快捷键绑定
 class _EditorArea extends ConsumerWidget {
   const _EditorArea();
 
@@ -78,31 +80,64 @@ class _EditorArea extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final editorState = ref.watch(editorProvider);
     final editorNotifier = ref.read(editorProvider.notifier);
+    final searchState = ref.watch(searchProvider);
 
     return CallbackShortcuts(
       bindings: {
+        // Cmd/Ctrl+S: 保存
         SingleActivator(
           LogicalKeyboardKey.keyS,
           meta: Platform.isMacOS,
           control: !Platform.isMacOS,
         ): () => _saveCurrentDocument(ref),
+        // Cmd/Ctrl+F: 打开搜索栏
+        SingleActivator(
+          LogicalKeyboardKey.keyF,
+          meta: Platform.isMacOS,
+          control: !Platform.isMacOS,
+        ): () => ref.read(searchProvider.notifier).openSearch(),
+        // Cmd/Ctrl+H: 打开搜索替换栏
+        SingleActivator(
+          LogicalKeyboardKey.keyH,
+          meta: Platform.isMacOS,
+          control: !Platform.isMacOS,
+        ): () => ref.read(searchProvider.notifier).openReplace(),
+        // Cmd/Ctrl+Shift+P: 打开命令面板
+        SingleActivator(
+          LogicalKeyboardKey.keyP,
+          meta: Platform.isMacOS,
+          control: !Platform.isMacOS,
+          shift: true,
+        ): () => ref.read(commandPaletteVisibleProvider.notifier).show(),
+        // Cmd/Ctrl+N: 新建标签
+        SingleActivator(
+          LogicalKeyboardKey.keyN,
+          meta: Platform.isMacOS,
+          control: !Platform.isMacOS,
+        ): () => ref.read(tabBarProvider.notifier).addTab(),
+        // Cmd/Ctrl+O: 打开文件
+        SingleActivator(
+          LogicalKeyboardKey.keyO,
+          meta: Platform.isMacOS,
+          control: !Platform.isMacOS,
+        ): () => _openFile(ref),
+        // Cmd/Ctrl+W: 关闭当前标签
+        SingleActivator(
+          LogicalKeyboardKey.keyW,
+          meta: Platform.isMacOS,
+          control: !Platform.isMacOS,
+        ): () => _closeCurrentTab(ref),
       },
       child: Focus(
         autofocus: true,
         child: Column(
           children: [
-            // 工具栏（仅 WYSIWYG 模式下显示，对应 marktext FormatPicker）
-            if (editorState.mode == EditorMode.wysiwyg)
-              EditorToolbar(
-                onFormatAction: (type) {
-                  // TODO: 连接到 appflowy_editor 的 format 操作
-                },
-                onBlockAction: (type) {
-                  // TODO: 连接到 appflowy_editor 的 block 操作
-                },
-                onInsertAction: (type) {
-                  // TODO: 连接到 appflowy_editor 的插入操作
-                },
+            // 搜索替换栏（当 searchProvider.isVisible 时显示）
+            if (searchState.isVisible)
+              SearchReplaceBar(
+                getDocumentContent: () => ref.read(editorProvider).markdown,
+                onReplace: (newContent) =>
+                    ref.read(editorProvider.notifier).updateMarkdown(newContent),
               ),
 
             // 编辑器主体（根据模式切换）
@@ -135,6 +170,24 @@ class _EditorArea extends ConsumerWidget {
         ref.read(tabBarProvider.notifier).updateTabSaved(activeDoc.id);
       }
     });
+  }
+
+  /// 打开文件（通过文件选择器）
+  void _openFile(WidgetRef ref) {
+    ref.read(fileProvider.notifier).openFile().then((doc) {
+      if (doc != null) {
+        ref.read(tabBarProvider.notifier).openFileTab(doc);
+      }
+    });
+  }
+
+  /// 关闭当前标签
+  void _closeCurrentTab(WidgetRef ref) {
+    final tabState = ref.read(tabBarProvider);
+    final activeId = tabState.activeTabId;
+    if (activeId != null) {
+      ref.read(tabBarProvider.notifier).closeTab(activeId);
+    }
   }
 
   /// 根据当前模式构建对应的编辑器
@@ -209,38 +262,46 @@ class _DesktopLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return Stack(
       children: [
-        // 标题栏（对应 marktext title-bar，在 editor-middle 内）
-        TitleBar(
-          filename: filename,
-          isSaved: isSaved,
-        ),
+        // 主布局
+        Column(
+          children: [
+            // 标题栏（对应 marktext title-bar，在 editor-middle 内）
+            TitleBar(
+              filename: filename,
+              isSaved: isSaved,
+            ),
 
-        // 主体区域：侧边栏 + 编辑区
-        Expanded(
-          child: Row(
-            children: [
-              // 侧边栏（对应 marktext side-bar）
-              const SideBar(),
+            // 主体区域：侧边栏 + 编辑区
+            Expanded(
+              child: Row(
+                children: [
+                  // 侧边栏（对应 marktext side-bar）
+                  const SideBar(),
 
-              // 编辑器中间区域（对应 editor-middle）
-              const Expanded(
-                child: Column(
-                  children: [
-                    // 标签栏（对应 editorWithTabs/tabs）
-                    EditorTabBar(),
+                  // 编辑器中间区域（对应 editor-middle）
+                  const Expanded(
+                    child: Column(
+                      children: [
+                        // 标签栏（对应 editorWithTabs/tabs）
+                        EditorTabBar(),
 
-                    // 编辑区域：工具栏 + 编辑器 + 状态栏
-                    Expanded(
-                      child: _EditorArea(),
+                        // 编辑区域：编辑器 + 状态栏
+                        Expanded(
+                          child: _EditorArea(),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
+
+        // 命令面板（overlay 覆盖层）
+        const CommandPalette(),
       ],
     );
   }

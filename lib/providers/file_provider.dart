@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/document.dart';
 import '../services/file_service.dart';
+import '../services/settings_service.dart';
 
 /// 文件状态（对应 marktext project store + editor store 中的文件相关状态）
 class FileState {
@@ -65,11 +66,15 @@ class FileState {
 /// 文件状态 Notifier（对应 marktext useProjectStore + useEditorStore 中的文件 actions）
 class FileNotifier extends Notifier<FileState> {
   late final FileService _fileService;
+  late final SettingsService _settingsService;
 
   @override
   FileState build() {
     _fileService = ref.read(fileServiceProvider);
-    return const FileState();
+    _settingsService = ref.read(settingsServiceProvider);
+    // 从持久化存储加载最近文件列表
+    final recentFiles = _settingsService.getRecentFiles();
+    return FileState(recentFiles: recentFiles);
   }
 
   /// 打开文件夹（对应 marktext ASK_FOR_OPEN_PROJECT）
@@ -88,6 +93,10 @@ class FileNotifier extends Notifier<FileState> {
         projectTree: () => tree,
         isLoading: false,
       );
+
+      // 持久化最后打开的文件夹
+      _settingsService.addRecentFolder(path);
+      _settingsService.setLastOpenedFolder(path);
     } catch (e) {
       state = state.copyWith(isLoading: false);
     }
@@ -310,6 +319,10 @@ class FileNotifier extends Notifier<FileState> {
   /// 设置最近文件列表
   void setRecentFiles(List<String> files) {
     state = state.copyWith(recentFiles: files);
+    // 清空时同步持久化
+    if (files.isEmpty) {
+      _settingsService.clearRecentFiles();
+    }
   }
 
   void _addRecentFile(String path) {
@@ -320,6 +333,8 @@ class FileNotifier extends Notifier<FileState> {
       files.removeRange(20, files.length);
     }
     state = state.copyWith(recentFiles: files);
+    // 持久化到 SharedPreferences
+    _settingsService.addRecentFile(path);
   }
 }
 

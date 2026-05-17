@@ -8,12 +8,18 @@
 /// 在 Flutter 中使用 GoRouter 实现类似的路由结构。
 library;
 
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'pages/editor_page.dart';
 import 'pages/settings_page.dart';
+import 'providers/theme_provider.dart';
 import 'screens/welcome_screen.dart';
+import 'services/menu_service.dart';
 
 /// 路由配置（参考 marktext router/index.js）
 final GoRouter _router = GoRouter(
@@ -74,29 +80,32 @@ final GoRouter _router = GoRouter(
   ],
 );
 
+/// 是否为桌面平台
+bool get _isDesktop =>
+    !kIsWeb && (Platform.isMacOS || Platform.isWindows || Platform.isLinux);
+
 /// 应用根 Widget
-class MarkdownEditorApp extends StatelessWidget {
+class MarkdownEditorApp extends ConsumerWidget {
   const MarkdownEditorApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp.router(
+  Widget build(BuildContext context, WidgetRef ref) {
+    // 从 ThemeProvider 获取当前主题
+    final themeData = ref.watch(currentThemeDataProvider);
+
+    final app = MaterialApp.router(
       title: 'MarkFlowy',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
-      ),
-      darkTheme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.blue,
-          brightness: Brightness.dark,
-        ),
-        useMaterial3: true,
-      ),
-      // 跟随系统主题（对应 marktext 的 followSystemTheme 设置）
-      themeMode: ThemeMode.system,
+      theme: themeData,
       routerConfig: _router,
     );
+
+    // 仅在桌面端启用原生菜单栏
+    if (_isDesktop) {
+      final menuService = ref.watch(menuServiceProvider);
+      return menuService.buildMenuBar(child: app);
+    }
+
+    return app;
   }
 }

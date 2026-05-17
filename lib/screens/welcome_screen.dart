@@ -10,6 +10,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../providers/editor_provider.dart';
 import '../providers/file_provider.dart';
 import '../utils/constants.dart';
 import '../widgets/tabs/tab_bar.dart';
@@ -139,7 +140,17 @@ class WelcomeScreen extends ConsumerWidget {
           ...recentFiles.take(10).map(
             (filePath) => _RecentFileItem(
               filePath: filePath,
-              onTap: () => ref.read(fileProvider.notifier).openFile(filePath),
+              onTap: () async {
+                // 打开文件并同步到标签栏和编辑器
+                final doc =
+                    await ref.read(fileProvider.notifier).openFile(filePath);
+                if (doc != null) {
+                  ref.read(tabBarProvider.notifier).openFileTab(doc);
+                  ref
+                      .read(editorProvider.notifier)
+                      .loadDocument(doc.id, doc.content);
+                }
+              },
             ),
           ),
         ],
