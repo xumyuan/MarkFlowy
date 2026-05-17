@@ -374,7 +374,7 @@ class FileService {
 
   /// 判断路径是否存在
   Future<bool> exists(String pathname) async {
-    return FileSystemEntity.type(pathname) != FileSystemEntityType.notFound;
+    return await FileSystemEntity.type(pathname) != FileSystemEntityType.notFound;
   }
 
   // ============ 忽略自身写入触发的事件 ============
