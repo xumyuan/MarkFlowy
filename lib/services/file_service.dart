@@ -12,10 +12,13 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
+
+import 'encoding_service.dart';
 
 /// 文件树节点数据模型
 class FileTreeNode {
@@ -134,18 +137,32 @@ class FileService {
   // ============ 文件读取 ============
 
   /// 读取 Markdown 文件（对应 marktext loadMarkdownFile）
-  Future<LoadFileResult> loadFile(String pathname) async {
+  /// 支持自动编码检测
+  Future<LoadFileResult> loadFile(String pathname, {bool autoDetectEncoding = true}) async {
     final file = File(pathname);
     if (!await file.exists()) {
       throw FileSystemException('文件不存在', pathname);
     }
 
-    // 读取文件内容（UTF-8）
-    final content = await file.readAsString();
+    // 读取文件原始字节
+    final bytes = await file.readAsBytes();
+
+    String content;
+    String encoding = 'utf8';
+
+    if (autoDetectEncoding) {
+      // 使用编码服务自动检测
+      final encService = EncodingService();
+      final result = encService.detectEncoding(bytes);
+      content = result.text;
+      encoding = result.encoding;
+    } else {
+      // 默认 UTF-8
+      content = utf8.decode(bytes);
+    }
 
     // 检测行尾符（对应 marktext 的行尾检测逻辑）
-    final hasLf = content.contains('\n') &&
-        !content.contains('\r\n');
+    final hasLf = content.contains('\n') && !content.contains('\r\n');
     final hasCrlf = content.contains('\r\n');
     String lineEnding = 'lf';
     if (hasCrlf && !hasLf) {
@@ -160,7 +177,7 @@ class FileService {
       filename: p.basename(pathname),
       pathname: pathname,
       lineEnding: lineEnding,
-      encoding: 'utf8',
+      encoding: encoding,
     );
   }
 

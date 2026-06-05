@@ -199,6 +199,52 @@ class _EditorAreaState extends ConsumerState<_EditorArea> {
           meta: Platform.isMacOS,
           control: !Platform.isMacOS,
         ): () => _closeCurrentTab(ref),
+        // 切换打字机模式 (对应 marktext typewriter)
+        // macOS: Cmd+Option+T, Windows/Linux: Ctrl+Shift+G
+        if (Platform.isMacOS)
+          SingleActivator(
+            LogicalKeyboardKey.keyT,
+            meta: true,
+            alt: true,
+          ): () => editorNotifier.toggleTypewriterMode(),
+        if (!Platform.isMacOS)
+          SingleActivator(
+            LogicalKeyboardKey.keyG,
+            control: true,
+            shift: true,
+          ): () => editorNotifier.toggleTypewriterMode(),
+        // Cmd/Ctrl+Shift+J: 切换焦点模式 (对应 marktext focus)
+        SingleActivator(
+          LogicalKeyboardKey.keyJ,
+          meta: Platform.isMacOS,
+          control: !Platform.isMacOS,
+          shift: true,
+        ): () => editorNotifier.toggleFocusMode(),
+        // 源码模式: macOS Cmd+Option+S, Windows/Linux Ctrl+E
+        if (Platform.isMacOS)
+          SingleActivator(
+            LogicalKeyboardKey.keyS,
+            meta: true,
+            alt: true,
+          ): () => editorNotifier.cycleMode(),
+        if (!Platform.isMacOS)
+          SingleActivator(
+            LogicalKeyboardKey.keyE,
+            control: true,
+          ): () => editorNotifier.cycleMode(),
+        // Escape: 关闭搜索栏 / 清除焦点
+        const SingleActivator(LogicalKeyboardKey.escape): () {
+          final searchState = ref.read(searchProvider);
+          if (searchState.isVisible) {
+            ref.read(searchProvider.notifier).close();
+          }
+        },
+        // Cmd+G / F3: 查找下一个
+        SingleActivator(
+          LogicalKeyboardKey.keyG,
+          meta: Platform.isMacOS,
+          control: !Platform.isMacOS,
+        ): () => ref.read(searchProvider.notifier).findNext(),
       },
       child: Focus(
         autofocus: true,
