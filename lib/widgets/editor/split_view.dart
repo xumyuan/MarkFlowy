@@ -23,11 +23,15 @@ class SplitView extends StatefulWidget {
   /// 初始分割比例（0.0~1.0，表示左侧占比）
   final double initialSplitRatio;
 
+  /// 搜索高亮信息
+  final SourceEditorSearchHighlight? searchHighlight;
+
   const SplitView({
     super.key,
     this.initialContent = '',
     this.onContentChanged,
     this.initialSplitRatio = 0.5,
+    this.searchHighlight,
   });
 
   @override
@@ -85,6 +89,7 @@ class _SplitViewState extends State<SplitView> {
                 initialContent: _currentContent,
                 onContentChanged: _onContentChanged,
                 showLineNumbers: true,
+                searchHighlight: widget.searchHighlight,
               ),
             ),
 

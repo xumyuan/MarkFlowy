@@ -5,7 +5,10 @@
 /// - 搜索输入框 + 上/下导航 + 匹配计数
 /// - 替换输入框 + 替换/全部替换按钮
 /// - 选项：大小写敏感、全词匹配、正则表达式
+/// - 150ms 输入防抖（对应 marktext debounce）
 library;
+
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -36,8 +39,15 @@ class _SearchReplaceBarState extends ConsumerState<SearchReplaceBar> {
   final _replaceController = TextEditingController();
   final _searchFocusNode = FocusNode();
 
+  /// 搜索防抖定时器（对应 marktext 的 debounce 机制）
+  Timer? _searchDebounceTimer;
+
+  /// 防抖延迟（毫秒）
+  static const _debounceMs = 150;
+
   @override
   void dispose() {
+    _searchDebounceTimer?.cancel();
     _searchController.dispose();
     _replaceController.dispose();
     _searchFocusNode.dispose();
@@ -233,7 +243,12 @@ class _SearchReplaceBarState extends ConsumerState<SearchReplaceBar> {
         ),
         onChanged: (value) {
           ref.read(searchProvider.notifier).updateQuery(value);
-          _performSearch();
+          // 防抖搜索（对应 marktext 150ms debounce）
+          _searchDebounceTimer?.cancel();
+          _searchDebounceTimer = Timer(
+            const Duration(milliseconds: _debounceMs),
+            _performSearch,
+          );
         },
         onSubmitted: (_) {
           ref.read(searchProvider.notifier).findNext();

@@ -282,6 +282,19 @@ class _EditorAreaState extends ConsumerState<_EditorArea> {
 
   /// 根据当前模式构建对应的编辑器
   Widget _buildEditorByMode(AppEditorState state, EditorNotifier notifier) {
+    // 构建搜索高亮信息（源码和分屏模式需要）
+    final searchState = ref.watch(searchProvider);
+    SourceEditorSearchHighlight? searchHighlight;
+    if (searchState.isVisible && searchState.result.hasMatches) {
+      final ranges = searchState.result.matches
+          .map((m) => TextRange(start: m.start, end: m.end))
+          .toList();
+      searchHighlight = SourceEditorSearchHighlight(
+        ranges: ranges,
+        currentHighlightIndex: searchState.result.currentIndex,
+      );
+    }
+
     return switch (state.mode) {
       EditorMode.wysiwyg => WysiwygEditor(
           key: _wysiwygKey,
@@ -289,13 +302,13 @@ class _EditorAreaState extends ConsumerState<_EditorArea> {
           typewriterMode: state.isTypewriterMode,
           focusMode: state.isFocusMode,
           onContentChanged: (content) {
-            // 同步内容到 provider（用 syncContent 避免标记脏状态之外的问题）
             notifier.syncContent(content);
             _scheduleAutoSave();
           },
         ),
       EditorMode.sourceCode => SourceEditor(
           initialContent: state.markdown,
+          searchHighlight: searchHighlight,
           onContentChanged: (content) {
             notifier.updateMarkdown(content);
             _scheduleAutoSave();
@@ -303,6 +316,7 @@ class _EditorAreaState extends ConsumerState<_EditorArea> {
         ),
       EditorMode.splitView => SplitView(
           initialContent: state.markdown,
+          searchHighlight: searchHighlight,
           onContentChanged: (content) {
             notifier.updateMarkdown(content);
             _scheduleAutoSave();

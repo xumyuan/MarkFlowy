@@ -3,12 +3,118 @@
 ///
 /// 功能:
 /// - 显示原始 Markdown 文本
-/// - 支持语法高亮（使用 highlight 主题）
+/// - 搜索匹配高亮（对应 marktext .ag-highlight）
 /// - 行号显示
 /// - 内容同步（切换模式时保持内容一致）
 library;
 
 import 'package:flutter/material.dart';
+
+/// 搜索结果匹配信息
+class SourceEditorSearchHighlight {
+  final List<TextRange> ranges;
+  final int currentHighlightIndex;
+
+  const SourceEditorSearchHighlight({
+    this.ranges = const [],
+    this.currentHighlightIndex = -1,
+  });
+
+  bool get hasHighlights => ranges.isNotEmpty;
+}
+
+/// 支持搜索高亮的 TextEditingController
+class HighlightTextEditingController extends TextEditingController {
+  /// 所有匹配的文本范围
+  List<TextRange> _highlightRanges = [];
+
+  /// 当前高亮的匹配索引
+  int _currentIndex = -1;
+
+  /// 基础文本样式
+  TextStyle? baseStyle;
+
+  /// 匹配高亮样式（对应 marktext .ag-highlight）
+  Color highlightColor = const Color(0x6688CCFF);
+
+  /// 当前匹配高亮样式（对应 marktext .ag-highlight-current）
+  Color currentHighlightColor = const Color(0x996699FF);
+
+  HighlightTextEditingController({String? text}) : super(text: text);
+
+  /// 设置高亮范围
+  void setHighlights(List<TextRange> ranges, {int currentIndex = -1}) {
+    _highlightRanges = List.from(ranges);
+    _currentIndex = currentIndex;
+    notifyListeners();
+  }
+
+  /// 清除高亮
+  void clearHighlights() {
+    if (_highlightRanges.isNotEmpty) {
+      _highlightRanges = [];
+      _currentIndex = -1;
+      notifyListeners();
+    }
+  }
+
+  @override
+  TextSpan buildTextSpan({
+    required BuildContext context,
+    TextStyle? style,
+    required bool withComposing,
+  }) {
+    final effectiveStyle = baseStyle ?? style;
+    if (effectiveStyle == null) {
+      return super.buildTextSpan(
+        context: context,
+        style: style,
+        withComposing: withComposing,
+      );
+    }
+
+    if (_highlightRanges.isEmpty) {
+      return TextSpan(text: text, style: effectiveStyle);
+    }
+
+    final children = <TextSpan>[];
+    int lastEnd = 0;
+
+    for (var i = 0; i < _highlightRanges.length; i++) {
+      final range = _highlightRanges[i];
+      final isCurrent = i == _currentIndex;
+
+      // 添加匹配前文本
+      if (range.start > lastEnd) {
+        children.add(TextSpan(
+          text: text.substring(lastEnd, range.start),
+          style: effectiveStyle,
+        ));
+      }
+
+      // 添加高亮文本
+      children.add(TextSpan(
+        text: text.substring(range.start, range.end),
+        style: effectiveStyle.copyWith(
+          backgroundColor: isCurrent ? currentHighlightColor : highlightColor,
+          color: effectiveStyle.color,
+        ),
+      ));
+
+      lastEnd = range.end;
+    }
+
+    // 添加剩余文本
+    if (lastEnd < text.length) {
+      children.add(TextSpan(
+        text: text.substring(lastEnd),
+        style: effectiveStyle,
+      ));
+    }
+
+    return TextSpan(text: '', children: children);
+  }
+}
 
 /// Markdown 源码编辑器
 /// 对应 marktext sourceCode.vue 中的 CodeMirror 编辑器
@@ -28,6 +134,9 @@ class SourceEditor extends StatefulWidget {
   /// 是否自动获取焦点
   final bool autoFocus;
 
+  /// 搜索高亮信息
+  final SourceEditorSearchHighlight? searchHighlight;
+
   const SourceEditor({
     super.key,
     this.initialContent = '',
@@ -35,21 +144,22 @@ class SourceEditor extends StatefulWidget {
     this.showLineNumbers = true,
     this.lineWrapping = true,
     this.autoFocus = true,
+    this.searchHighlight,
   });
 
   @override
-  State<SourceEditor> createState() => _SourceEditorState();
+  State<SourceEditor> createState() => SourceEditorState();
 }
 
-class _SourceEditorState extends State<SourceEditor> {
-  late TextEditingController _controller;
+class SourceEditorState extends State<SourceEditor> {
+  late HighlightTextEditingController _controller;
   late ScrollController _scrollController;
   late FocusNode _focusNode;
 
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(text: widget.initialContent);
+    _controller = HighlightTextEditingController(text: widget.initialContent);
     _scrollController = ScrollController();
     _focusNode = FocusNode();
 
@@ -69,6 +179,16 @@ class _SourceEditorState extends State<SourceEditor> {
     if (oldWidget.initialContent != widget.initialContent &&
         _controller.text != widget.initialContent) {
       _controller.text = widget.initialContent;
+    }
+
+    // 更新搜索高亮
+    if (widget.searchHighlight != null && widget.searchHighlight!.hasHighlights) {
+      _controller.setHighlights(
+        widget.searchHighlight!.ranges,
+        currentIndex: widget.searchHighlight!.currentHighlightIndex,
+      );
+    } else if (widget.searchHighlight?.hasHighlights == false) {
+      _controller.clearHighlights();
     }
   }
 
@@ -155,6 +275,18 @@ class _SourceEditorState extends State<SourceEditor> {
 
   /// 构建编辑区域
   Widget _buildEditor(ThemeData theme, bool isDark) {
+    final textColor = isDark
+        ? Colors.white.withValues(alpha: 0.9)
+        : Colors.black87;
+
+    // 设置控制器的基础样式
+    _controller.baseStyle = TextStyle(
+      fontSize: 14,
+      fontFamily: 'monospace',
+      height: 1.43,
+      color: textColor,
+    );
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: TextField(
@@ -167,7 +299,7 @@ class _SourceEditorState extends State<SourceEditor> {
           fontSize: 14,
           fontFamily: 'monospace',
           height: 1.43, // 约 20px 行高
-          color: isDark ? Colors.white.withValues(alpha: 0.9) : Colors.black87,
+          color: textColor,
         ),
         decoration: const InputDecoration(
           border: InputBorder.none,
@@ -184,5 +316,15 @@ class _SourceEditorState extends State<SourceEditor> {
   /// 设置文本内容
   set content(String value) {
     _controller.text = value;
+  }
+
+  /// 设置搜索高亮
+  void setSearchHighlight(List<TextRange> ranges, {int currentIndex = -1}) {
+    _controller.setHighlights(ranges, currentIndex: currentIndex);
+  }
+
+  /// 清除搜索高亮
+  void clearSearchHighlight() {
+    _controller.clearHighlights();
   }
 }

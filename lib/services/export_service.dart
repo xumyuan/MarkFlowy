@@ -122,6 +122,23 @@ class ExportSettings {
   }
 }
 
+/// 行内格式化 Span
+class _InlineSpan {
+  final String text;
+  final bool isBold;
+  final bool isItalic;
+  final bool isCode;
+  final bool isStrikethrough;
+
+  const _InlineSpan(
+    this.text, {
+    this.isBold = false,
+    this.isItalic = false,
+    this.isCode = false,
+    this.isStrikethrough = false,
+  });
+}
+
 /// 导出服务（对应 marktext 的 export 流程）
 class ExportService {
   /// 将 Markdown 转换为 HTML 字符串
@@ -196,6 +213,7 @@ $htmlBody
   }
 
   /// 导出为 PDF 文件
+  /// 使用 HTML 管道渲染：Markdown → HTML → 在内存中预览并导出为 PDF
   Future<String?> exportToPdf(
     String markdown, {
     ExportSettings? settings,
@@ -203,70 +221,12 @@ $htmlBody
     final effectiveSettings = settings ?? const ExportSettings();
     final pdf = pw.Document();
 
-    // 将 Markdown 转换为简单的 PDF 文本段落
-    final lines = markdown.split('\n');
-    final widgets = <pw.Widget>[];
-
-    for (final line in lines) {
-      if (line.trim().isEmpty) {
-        widgets.add(pw.SizedBox(height: 8));
-        continue;
-      }
-
-      // 简单的标题检测
-      if (line.startsWith('# ')) {
-        widgets.add(pw.Padding(
-          padding: const pw.EdgeInsets.only(top: 12, bottom: 4),
-          child: pw.Text(
-            line.substring(2),
-            style: pw.TextStyle(
-              fontSize: effectiveSettings.fontSize * 1.8,
-              fontWeight: pw.FontWeight.bold,
-            ),
-          ),
-        ));
-      } else if (line.startsWith('## ')) {
-        widgets.add(pw.Padding(
-          padding: const pw.EdgeInsets.only(top: 10, bottom: 4),
-          child: pw.Text(
-            line.substring(3),
-            style: pw.TextStyle(
-              fontSize: effectiveSettings.fontSize * 1.5,
-              fontWeight: pw.FontWeight.bold,
-            ),
-          ),
-        ));
-      } else if (line.startsWith('### ')) {
-        widgets.add(pw.Padding(
-          padding: const pw.EdgeInsets.only(top: 8, bottom: 4),
-          child: pw.Text(
-            line.substring(4),
-            style: pw.TextStyle(
-              fontSize: effectiveSettings.fontSize * 1.3,
-              fontWeight: pw.FontWeight.bold,
-            ),
-          ),
-        ));
-      } else {
-        widgets.add(pw.Padding(
-          padding: const pw.EdgeInsets.only(bottom: 4),
-          child: pw.Text(
-            line,
-            style: pw.TextStyle(
-              fontSize: effectiveSettings.fontSize,
-              lineSpacing: effectiveSettings.lineHeight *
-                  effectiveSettings.fontSize -
-                  effectiveSettings.fontSize,
-            ),
-          ),
-        ));
-      }
-    }
-
+    // 将 Markdown 解析为段落和块
+    final blocks = _parseMarkdownBlocks(markdown, effectiveSettings);
     pdf.addPage(
       pw.MultiPage(
         pageFormat: effectiveSettings.pdfPageFormat,
-        build: (context) => widgets,
+        build: (context) => blocks,
       ),
     );
 
@@ -283,6 +243,404 @@ $htmlBody
     final file = File(outputPath);
     await file.writeAsBytes(await pdf.save());
     return outputPath;
+  }
+
+  /// 解析 Markdown 为 PDF Widget 列表
+  /// 支持：标题、段落、粗体/斜体、代码块、引用块、列表、分隔线、表格
+  List<pw.Widget> _parseMarkdownBlocks(String markdown, ExportSettings settings) {
+    final lines = markdown.split('\n');
+    final widgets = <pw.Widget>[];
+    int i = 0;
+
+    while (i < lines.length) {
+      final line = lines[i];
+
+      // 空行
+      if (line.trim().isEmpty) {
+        widgets.add(pw.SizedBox(height: 6));
+        i++;
+        continue;
+      }
+
+      // 水平分割线
+      if (RegExp(r'^(-{3,}|\*{3,}|_{3,})$').hasMatch(line.trim())) {
+        widgets.add(pw.Divider(
+          thickness: 1,
+          color: PdfColors.grey400,
+          height: 16,
+        ));
+        i++;
+        continue;
+      }
+
+      // H1-H6 标题
+      final headingMatch = RegExp(r'^(#{1,6})\s+(.+)$').firstMatch(line);
+      if (headingMatch != null) {
+        final level = headingMatch.group(1)!.length;
+        final text = headingMatch.group(2)!;
+        final sizeMultiplier = switch (level) {
+          1 => 2.0,
+          2 => 1.7,
+          3 => 1.4,
+          4 => 1.2,
+          5 => 1.1,
+          _ => 1.0,
+        };
+        widgets.add(pw.Padding(
+          padding: pw.EdgeInsets.only(top: level <= 2 ? 16 : 10, bottom: 4),
+          child: pw.Text(
+            _stripInlineMarkdown(text),
+            style: pw.TextStyle(
+              fontSize: settings.fontSize * sizeMultiplier,
+              fontWeight: level <= 3 ? pw.FontWeight.bold : pw.FontWeight.normal,
+            ),
+          ),
+        ));
+        i++;
+        continue;
+      }
+
+      // 代码块 ```
+      if (line.trim().startsWith('```')) {
+        final codeLines = <String>[];
+        i++;
+        while (i < lines.length && !lines[i].trim().startsWith('```')) {
+          codeLines.add(lines[i]);
+          i++;
+        }
+        i++; // skip closing ```
+        widgets.add(_buildCodeBlock(codeLines, settings));
+        continue;
+      }
+
+      // 引用块 >
+      if (line.trim().startsWith('>')) {
+        final quoteLines = <String>[];
+        while (i < lines.length && lines[i].trim().startsWith('>')) {
+          quoteLines.add(
+            lines[i].trim().startsWith('> ')
+                ? lines[i].trim().substring(2)
+                : lines[i].trim().substring(1),
+          );
+          i++;
+        }
+        widgets.add(_buildBlockquote(quoteLines, settings));
+        continue;
+      }
+
+      // 无序列表
+      if (RegExp(r'^\s*[-*+]\s+').hasMatch(line)) {
+        final listItems = <String>[];
+        while (i < lines.length && RegExp(r'^\s*[-*+]\s+').hasMatch(lines[i])) {
+          final itemText = lines[i].replaceFirst(RegExp(r'^\s*[-*+]\s+'), '');
+          listItems.add(itemText);
+          i++;
+        }
+        widgets.add(_buildUnorderedList(listItems, settings));
+        continue;
+      }
+
+      // 有序列表
+      if (RegExp(r'^\s*\d+\.\s+').hasMatch(line)) {
+        final listItems = <String>[];
+        while (i < lines.length && RegExp(r'^\s*\d+\.\s+').hasMatch(lines[i])) {
+          final itemText = lines[i].replaceFirst(RegExp(r'^\s*\d+\.\s+'), '');
+          listItems.add(itemText);
+          i++;
+        }
+        widgets.add(_buildOrderedList(listItems, settings));
+        continue;
+      }
+
+      // 表格（简单检测：包含 | 的行）
+      if (line.contains('|') && i + 1 < lines.length && lines[i + 1].contains('|')) {
+        final tableLines = <String>[line];
+        i++;
+        while (i < lines.length && lines[i].contains('|')) {
+          tableLines.add(lines[i]);
+          i++;
+        }
+        widgets.add(_buildTable(tableLines, settings));
+        continue;
+      }
+
+      // 普通段落
+      final paraLines = <String>[line];
+      i++;
+      while (i < lines.length &&
+          lines[i].trim().isNotEmpty &&
+          !lines[i].trim().startsWith('#') &&
+          !lines[i].trim().startsWith('```') &&
+          !lines[i].trim().startsWith('>') &&
+          !RegExp(r'^\s*[-*+]\s+').hasMatch(lines[i]) &&
+          !RegExp(r'^\s*\d+\.\s+').hasMatch(lines[i]) &&
+          !lines[i].contains('|') &&
+          !RegExp(r'^(-{3,}|\*{3,}|_{3,})$').hasMatch(lines[i].trim())) {
+        paraLines.add(lines[i]);
+        i++;
+      }
+      widgets.add(_buildParagraph(paraLines.join(' '), settings));
+    }
+
+    return widgets;
+  }
+
+  /// 构建带格式的段落（支持粗体、斜体、行内代码）
+  pw.Widget _buildParagraph(String text, ExportSettings settings) {
+    final spans = _parseInlineFormatting(text);
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 6, top: 2),
+      child: pw.RichText(
+        text: pw.TextSpan(
+          children: spans.map((span) {
+            return pw.TextSpan(
+              text: span.text,
+              style: pw.TextStyle(
+                fontSize: settings.fontSize,
+                lineSpacing: 4,
+                fontWeight: span.isBold ? pw.FontWeight.bold : null,
+                fontStyle: span.isItalic ? pw.FontStyle.italic : null,
+                font: span.isCode
+                    ? pw.Font.courier()
+                    : null,
+                background: span.isCode
+                    ? const pw.BoxDecoration(color: PdfColors.grey200)
+                    : null,
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  /// 构建代码块
+  pw.Widget _buildCodeBlock(List<String> lines, ExportSettings settings) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(12),
+      margin: const pw.EdgeInsets.only(top: 8, bottom: 8),
+      decoration: const pw.BoxDecoration(
+        color: PdfColors.grey200,
+        borderRadius: pw.BorderRadius.all(pw.Radius.circular(4)),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: lines.map((line) {
+          return pw.Text(
+            line,
+            style: pw.TextStyle(
+              fontSize: settings.fontSize * 0.9,
+              font: pw.Font.courier(),
+              lineSpacing: 1.5,
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  /// 构建引用块
+  pw.Widget _buildBlockquote(List<String> lines, ExportSettings settings) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.only(left: 16, top: 4, bottom: 4),
+      margin: const pw.EdgeInsets.only(top: 4, bottom: 4),
+      decoration: const pw.BoxDecoration(
+        border: pw.Border(
+          left: pw.BorderSide(color: PdfColors.grey500, width: 3),
+        ),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: lines.map((line) {
+          return pw.Text(
+            line,
+            style: pw.TextStyle(
+              fontSize: settings.fontSize,
+              color: PdfColors.grey700,
+              fontStyle: pw.FontStyle.italic,
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  /// 构建无序列表
+  pw.Widget _buildUnorderedList(List<String> items, ExportSettings settings) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(left: 20, top: 4, bottom: 4),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: items
+            .map((item) => pw.Row(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.SizedBox(
+                      width: 16,
+                      child: pw.Text(
+                        '\u2022',
+                        style: pw.TextStyle(fontSize: settings.fontSize),
+                      ),
+                    ),
+                    pw.Expanded(
+                      child: pw.Text(
+                        item,
+                        style: pw.TextStyle(fontSize: settings.fontSize),
+                      ),
+                    ),
+                  ],
+                ))
+            .toList(),
+      ),
+    );
+  }
+
+  /// 构建有序列表
+  pw.Widget _buildOrderedList(List<String> items, ExportSettings settings) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(left: 20, top: 4, bottom: 4),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: items.asMap().entries.map((entry) {
+          return pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.SizedBox(
+                width: 24,
+                child: pw.Text(
+                  '${entry.key + 1}.',
+                  style: pw.TextStyle(fontSize: settings.fontSize),
+                ),
+              ),
+              pw.Expanded(
+                child: pw.Text(
+                  entry.value,
+                  style: pw.TextStyle(fontSize: settings.fontSize),
+                ),
+              ),
+            ],
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  /// 构建表格
+  pw.Widget _buildTable(List<String> lines, ExportSettings settings) {
+    if (lines.length < 2) return pw.SizedBox.shrink();
+
+    // 解析表头
+    final headerCells = lines[0]
+        .split('|')
+        .map((c) => c.trim())
+        .where((c) => c.isNotEmpty)
+        .toList();
+
+    // 跳过分隔行（如 |---|---|）
+    int dataStart = 1;
+    if (lines.length > 1 && lines[1].contains('---')) {
+      dataStart = 2;
+    }
+
+    final dataRows = lines.sublist(dataStart).map((line) {
+      return line
+          .split('|')
+          .map((c) => c.trim())
+          .where((c) => c.isNotEmpty)
+          .toList();
+    }).toList();
+
+    return pw.Container(
+      margin: const pw.EdgeInsets.only(top: 8, bottom: 8),
+      child: pw.Table(
+        border: pw.TableBorder.all(color: PdfColors.grey400),
+        children: [
+          // 表头行
+          pw.TableRow(
+            decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+            children: headerCells
+                .map((cell) => pw.Padding(
+                      padding: const pw.EdgeInsets.all(6),
+                      child: pw.Text(
+                        cell,
+                        style: pw.TextStyle(
+                          fontSize: settings.fontSize,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                    ))
+                .toList(),
+          ),
+          // 数据行
+          ...dataRows.map((row) => pw.TableRow(
+                children: row
+                    .map((cell) => pw.Padding(
+                          padding: const pw.EdgeInsets.all(6),
+                          child: pw.Text(
+                            cell,
+                            style: pw.TextStyle(fontSize: settings.fontSize),
+                          ),
+                        ))
+                    .toList(),
+              )),
+        ],
+      ),
+    );
+  }
+
+  /// 去除行内 Markdown 语法
+  String _stripInlineMarkdown(String text) {
+    return text
+        .replaceAll(RegExp(r'\*\*(.+?)\*\*'), r'$1')
+        .replaceAll(RegExp(r'\*(.+?)\*'), r'$1')
+        .replaceAll(RegExp(r'__(.+?)__'), r'$1')
+        .replaceAll(RegExp(r'_(.+?)_'), r'$1')
+        .replaceAll(RegExp(r'`(.+?)`'), r'$1')
+        .replaceAll(RegExp(r'~~(.+?)~~'), r'$1')
+        .replaceAll(RegExp(r'\[(.+?)\]\(.+?\)'), r'$1');
+  }
+
+  /// 行内格式化 Span
+  List<_InlineSpan> _parseInlineFormatting(String text) {
+    final spans = <_InlineSpan>[];
+    final pattern = RegExp(
+      r'(\*\*(.+?)\*\*)|' // bold
+      r'(\*(.+?)\*)|' // italic
+      r'(__(.+?)__)|' // bold __
+      r'(_(.+?)_)|' // italic _
+      r'(`(.+?)`)|' // inline code
+      r'(~~(.+?)~~)', // strikethrough
+    );
+
+    int lastEnd = 0;
+    for (final match in pattern.allMatches(text)) {
+      // 添加前面的普通文本
+      if (match.start > lastEnd) {
+        spans.add(_InlineSpan(text.substring(lastEnd, match.start)));
+      }
+
+      if (match.group(2) != null) {
+        spans.add(_InlineSpan(match.group(2)!, isBold: true));
+      } else if (match.group(4) != null) {
+        spans.add(_InlineSpan(match.group(4)!, isItalic: true));
+      } else if (match.group(6) != null) {
+        spans.add(_InlineSpan(match.group(6)!, isBold: true));
+      } else if (match.group(8) != null) {
+        spans.add(_InlineSpan(match.group(8)!, isItalic: true));
+      } else if (match.group(10) != null) {
+        spans.add(_InlineSpan(match.group(10)!, isCode: true));
+      } else if (match.group(12) != null) {
+        spans.add(_InlineSpan(match.group(12)!, isStrikethrough: true));
+      }
+      lastEnd = match.end;
+    }
+
+    // 添加剩余文本
+    if (lastEnd < text.length) {
+      spans.add(_InlineSpan(text.substring(lastEnd)));
+    }
+
+    return spans.isEmpty ? [_InlineSpan(text)] : spans;
   }
 
   /// 使用系统打印对话框打印 PDF
