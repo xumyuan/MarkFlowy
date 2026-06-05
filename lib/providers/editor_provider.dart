@@ -112,6 +112,11 @@ class EditorNotifier extends Notifier<AppEditorState> {
     }
   }
 
+  /// 同步内容到 provider 并标记已修改（不会导致编辑器重建，因为 WYSIWYG 使用 GlobalKey 读取）
+  void syncContent(String markdown) {
+    state = state.copyWith(markdown: markdown, isModified: true);
+  }
+
   /// 加载文档内容（打开文件或切换标签时）
   void loadDocument(String docId, String markdown) {
     state = state.copyWith(

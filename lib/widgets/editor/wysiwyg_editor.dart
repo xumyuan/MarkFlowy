@@ -1,7 +1,13 @@
 /// WYSIWYG 编辑器组件
 /// 参考: appflowy_editor 6.2.0 官方 desktop_editor.dart 示例
+/// 参考: marktext/src/muya/ — Muya 编辑器引擎功能对照
 ///
-/// 使用 appflowy_editor 替代 Muya 编辑器
+/// 功能:
+/// - WYSIWYG 所见即所得 Markdown 编辑
+/// - 打字机模式（typewriter）：光标始终垂直居中
+/// - 焦点模式（focus）：高亮当前段落，淡化其他内容
+/// - 浮动工具栏（FloatingToolbar）
+/// - 内容同步（通过 GlobalKey 暴露 getMarkdown）
 library;
 
 import 'package:appflowy_editor/appflowy_editor.dart';
@@ -20,24 +26,42 @@ class WysiwygEditor extends StatefulWidget {
   /// 是否自动获取焦点
   final bool autoFocus;
 
+  /// 是否启用打字机模式（对应 marktext typewriter mode）
+  final bool typewriterMode;
+
+  /// 是否启用焦点模式（对应 marktext focus mode）
+  final bool focusMode;
+
   const WysiwygEditor({
     super.key,
     this.initialContent = '',
     this.onContentChanged,
     this.autoFocus = true,
+    this.typewriterMode = false,
+    this.focusMode = false,
   });
 
   @override
-  State<WysiwygEditor> createState() => _WysiwygEditorState();
+  State<WysiwygEditor> createState() => WysiwygEditorState();
 }
 
-class _WysiwygEditorState extends State<WysiwygEditor> {
+class WysiwygEditorState extends State<WysiwygEditor> {
   late EditorState _editorState;
   late EditorScrollController _scrollController;
+
+  /// 最后一次从外部同步的内容（用于判断是否需要更新编辑器）
+  String _lastExternalContent = '';
+
+  /// 内部变更追踪，避免循环更新
+  bool _isInternalChange = false;
+
+  /// 编辑器是否已初始化
+  bool _initialized = false;
 
   @override
   void initState() {
     super.initState();
+    _lastExternalContent = widget.initialContent;
     _initEditor();
   }
 
@@ -54,10 +78,12 @@ class _WysiwygEditorState extends State<WysiwygEditor> {
 
     // 监听内容变化
     _editorState.transactionStream.listen((event) {
-      if (event.$1 == TransactionTime.after) {
-        widget.onContentChanged?.call(
-          MarkdownUtils.docToMarkdown(_editorState.document),
-        );
+      if (event.$1 == TransactionTime.after && _initialized) {
+        _isInternalChange = true;
+        final markdown = MarkdownUtils.docToMarkdown(_editorState.document);
+        _lastExternalContent = markdown;
+        widget.onContentChanged?.call(markdown);
+        _isInternalChange = false;
       }
     });
 
@@ -69,8 +95,42 @@ class _WysiwygEditorState extends State<WysiwygEditor> {
             Position(path: [0]),
           );
         }
+        _initialized = true;
       });
+    } else {
+      _initialized = true;
     }
+  }
+
+  @override
+  void didUpdateWidget(WysiwygEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 当外部内容变化且不是内部编辑导致时，重新加载编辑器内容
+    if (!_isInternalChange &&
+        oldWidget.initialContent != widget.initialContent &&
+        widget.initialContent != _lastExternalContent) {
+      _reloadContent(widget.initialContent);
+    }
+  }
+
+  /// 重新加载编辑器内容（切换文档时）
+  void _reloadContent(String markdown) {
+    _lastExternalContent = markdown;
+    _editorState.dispose();
+    _scrollController.dispose();
+    final document = MarkdownUtils.createDocumentFromContent(markdown);
+    _editorState = EditorState(document: document);
+    _scrollController = EditorScrollController(
+      editorState: _editorState,
+      shrinkWrap: false,
+    );
+    setState(() {});
+  }
+
+  /// 加载新文档内容（外部调用，如标签切换）
+  void loadContent(String markdown) {
+    _lastExternalContent = markdown;
+    _reloadContent(markdown);
   }
 
   @override
@@ -112,13 +172,19 @@ class _WysiwygEditorState extends State<WysiwygEditor> {
     );
   }
 
-  /// 编辑器样式
+  /// 编辑器样式（支持打字机模式的大间距）
   EditorStyle _buildEditorStyle(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
+    // 打字机模式：使用超大垂直间距让光标保持屏幕中央
+    // 对应 marktext typewriter CSS: padding-top/bottom: calc(50vh - 2em)
+    final verticalPadding = widget.typewriterMode
+        ? MediaQuery.of(context).size.height * 0.35
+        : 24.0;
+
     return EditorStyle.desktop(
-      padding: const EdgeInsets.symmetric(horizontal: 60, vertical: 24),
+      padding: EdgeInsets.symmetric(horizontal: 60, vertical: verticalPadding),
       cursorColor: theme.colorScheme.primary,
       selectionColor: theme.colorScheme.primary.withValues(alpha: 0.3),
       textStyleConfiguration: TextStyleConfiguration(
@@ -132,20 +198,19 @@ class _WysiwygEditorState extends State<WysiwygEditor> {
   }
 
   /// 底部空白区域，点击时创建新段落并聚焦
-  /// 参考 appflowy_editor 官方 desktop_editor.dart 的 _buildFooter
   Widget _buildFooter() {
+    // 打字机模式下也需要底部留白
+    final extraHeight = widget.typewriterMode ? 300.0 : 100.0;
     return SizedBox(
-      height: 100,
+      height: extraHeight,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () async {
-          // 如果文档为空，插入一个新段落节点
           if (_editorState.document.root.children.isEmpty) {
             final transaction = _editorState.transaction;
             transaction.insertNode([0], paragraphNode());
             await _editorState.apply(transaction);
           }
-          // 聚焦到最后一个节点末尾
           WidgetsBinding.instance.addPostFrameCallback((_) {
             final lastIndex =
                 _editorState.document.root.children.length - 1;
@@ -160,8 +225,11 @@ class _WysiwygEditorState extends State<WysiwygEditor> {
     );
   }
 
-  /// 获取当前文档的 Markdown 内容
+  /// 获取当前文档的 Markdown 内容（供外部保存/搜索/模式切换时使用）
   String getMarkdown() {
     return MarkdownUtils.docToMarkdown(_editorState.document);
   }
+
+  /// 获取编辑器状态（供高级操作使用）
+  EditorState get editorState => _editorState;
 }

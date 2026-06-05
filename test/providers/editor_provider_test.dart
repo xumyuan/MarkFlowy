@@ -107,6 +107,27 @@ void main() {
       });
     });
 
+    group('syncContent', () {
+      test('应同步 markdown 内容并标记已修改', () {
+        container
+            .read(editorProvider.notifier)
+            .syncContent('# Sync Test');
+        final state = container.read(editorProvider);
+        expect(state.markdown, '# Sync Test');
+        expect(state.isModified, isTrue);
+      });
+
+      test('syncContent 应覆盖已有内容', () {
+        container
+            .read(editorProvider.notifier)
+            .updateMarkdown('old');
+        container
+            .read(editorProvider.notifier)
+            .syncContent('new');
+        expect(container.read(editorProvider).markdown, 'new');
+      });
+    });
+
     group('loadDocument', () {
       test('应加载文档内容', () {
         container

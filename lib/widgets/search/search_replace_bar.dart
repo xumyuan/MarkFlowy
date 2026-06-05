@@ -68,47 +68,43 @@ class _SearchReplaceBarState extends ConsumerState<SearchReplaceBar> {
       }
     });
 
-    return Positioned(
-      top: 0,
-      right: 20,
-      child: Material(
-        elevation: 4,
-        borderRadius: BorderRadius.circular(4),
-        color: theme.colorScheme.surface,
-        child: Container(
-          width: 400,
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(
-              color: theme.colorScheme.outline.withValues(alpha: 0.2),
-            ),
+    return Material(
+      elevation: 4,
+      borderRadius: BorderRadius.circular(4),
+      color: theme.colorScheme.surface,
+      child: Container(
+        width: 400,
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(
+            color: theme.colorScheme.outline.withValues(alpha: 0.2),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // 搜索行
-              _buildSearchRow(searchState, theme),
-              // 替换行（仅在替换模式显示）
-              if (searchState.panelType == SearchPanelType.replace)
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: _buildReplaceRow(searchState, theme),
-                ),
-              // 错误信息
-              if (searchState.errorMessage != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    searchState.errorMessage!,
-                    style: TextStyle(
-                      color: theme.colorScheme.error,
-                      fontSize: 12,
-                    ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 搜索行
+            _buildSearchRow(searchState, theme),
+            // 替换行（仅在替换模式显示）
+            if (searchState.panelType == SearchPanelType.replace)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: _buildReplaceRow(searchState, theme),
+              ),
+            // 错误信息
+            if (searchState.errorMessage != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  searchState.errorMessage!,
+                  style: TextStyle(
+                    color: theme.colorScheme.error,
+                    fontSize: 12,
                   ),
                 ),
-            ],
-          ),
+              ),
+          ],
         ),
       ),
     );

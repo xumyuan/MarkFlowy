@@ -7,7 +7,7 @@
 /// ├──────┬──────────────────────────────────────────────┤
 /// │      │              标签栏 (TabBar)                   │
 /// │ 侧边 ├──────────────────────────────────────────────┤
-/// │  栏  │          搜索替换栏 (SearchReplaceBar)         │
+/// │  栏  │    搜索替换栏 (SearchReplaceBar, Stack overlay) │
 /// │      ├──────────────────────────────────────────────┤
 /// │      │              编辑区 (Editor)                   │
 /// │      │                                               │
@@ -20,6 +20,7 @@
 /// - 手机: 抽屉式侧边栏
 library;
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:desktop_drop/desktop_drop.dart';
@@ -35,6 +36,7 @@ import '../providers/search_provider.dart';
 import '../utils/strings.dart';
 import '../widgets/command_palette.dart';
 import '../widgets/common/responsive_layout.dart';
+import '../widgets/editor/editor_toolbar.dart';
 import '../widgets/editor/mode_switcher.dart';
 import '../widgets/editor/source_editor.dart';
 import '../widgets/editor/split_view.dart';
@@ -77,11 +79,77 @@ class EditorScreen extends ConsumerWidget {
 /// 构建编辑区域：搜索栏 + 编辑器 + 状态栏(模式切换)
 /// 根据当前 EditorMode 显示不同的编辑器组件
 /// 包含应用级快捷键绑定
-class _EditorArea extends ConsumerWidget {
+class _EditorArea extends ConsumerStatefulWidget {
   const _EditorArea();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_EditorArea> createState() => _EditorAreaState();
+}
+
+class _EditorAreaState extends ConsumerState<_EditorArea> {
+  /// WYSIWYG 编辑器的 GlobalKey，用于获取实时内容
+  final _wysiwygKey = GlobalKey<WysiwygEditorState>();
+
+  /// 自动保存定时器
+  Timer? _autoSaveTimer;
+
+  /// 保存当前文档（从编辑器获取最新内容）
+  void _saveCurrentDocument() {
+    final tabState = ref.read(tabBarProvider);
+    final activeDoc = tabState.activeDocument;
+    if (activeDoc == null) return;
+
+    final editorState = ref.read(editorProvider);
+    String content;
+
+    // 根据当前模式获取最新内容
+    if (editorState.mode == EditorMode.wysiwyg) {
+      content = _wysiwygKey.currentState?.getMarkdown() ?? editorState.markdown;
+    } else {
+      content = editorState.markdown;
+    }
+
+    final docToSave = activeDoc.copyWith(content: content);
+    // 同步 provider 中的内容
+    ref.read(editorProvider.notifier).syncContent(content);
+
+    ref.read(fileProvider.notifier).saveFile(docToSave).then((success) {
+      if (success) {
+        ref.read(editorProvider.notifier).markSaved();
+        ref.read(tabBarProvider.notifier).updateTabSaved(activeDoc.id);
+      }
+    });
+  }
+
+  /// 获取当前文档内容的通用方法
+  String _getCurrentContent() {
+    final editorState = ref.read(editorProvider);
+    if (editorState.mode == EditorMode.wysiwyg) {
+      return _wysiwygKey.currentState?.getMarkdown() ?? editorState.markdown;
+    }
+    return editorState.markdown;
+  }
+
+  /// 启动自动保存
+  void _scheduleAutoSave() {
+    _autoSaveTimer?.cancel();
+    // 默认 5000ms 延迟自动保存（对应 marktext autoSaveDelay）
+    _autoSaveTimer = Timer(const Duration(seconds: 5), () {
+      final tabState = ref.read(tabBarProvider);
+      if (tabState.activeDocument != null && !tabState.activeDocument!.isSaved) {
+        _saveCurrentDocument();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _autoSaveTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final editorState = ref.watch(editorProvider);
     final editorNotifier = ref.read(editorProvider.notifier);
     final searchState = ref.watch(searchProvider);
@@ -93,7 +161,7 @@ class _EditorArea extends ConsumerWidget {
           LogicalKeyboardKey.keyS,
           meta: Platform.isMacOS,
           control: !Platform.isMacOS,
-        ): () => _saveCurrentDocument(ref),
+        ): _saveCurrentDocument,
         // Cmd/Ctrl+F: 打开搜索栏
         SingleActivator(
           LogicalKeyboardKey.keyF,
@@ -113,9 +181,9 @@ class _EditorArea extends ConsumerWidget {
           control: !Platform.isMacOS,
           shift: true,
         ): () => ref.read(commandPaletteVisibleProvider.notifier).show(),
-        // Cmd/Ctrl+N: 新建标签
+        // Cmd/Ctrl+T: 新建标签（与 marktext 对齐: marktext 用 Cmd/Ctrl+T）
         SingleActivator(
-          LogicalKeyboardKey.keyN,
+          LogicalKeyboardKey.keyT,
           meta: Platform.isMacOS,
           control: !Platform.isMacOS,
         ): () => ref.read(tabBarProvider.notifier).addTab(),
@@ -136,17 +204,38 @@ class _EditorArea extends ConsumerWidget {
         autofocus: true,
         child: Column(
           children: [
-            // 搜索替换栏（当 searchProvider.isVisible 时显示）
-            if (searchState.isVisible)
-              SearchReplaceBar(
-                getDocumentContent: () => ref.read(editorProvider).markdown,
-                onReplace: (newContent) =>
-                    ref.read(editorProvider.notifier).updateMarkdown(newContent),
+            // 工具栏（WYSIWYG 模式下显示）
+            if (editorState.mode == EditorMode.wysiwyg)
+              EditorToolbar(
+                onFormatAction: (type) => _handleFormatAction(type, editorNotifier),
+                onBlockAction: (type) => _handleBlockAction(type, editorNotifier),
+                onInsertAction: (type) => _handleInsertAction(type, editorNotifier),
               ),
 
-            // 编辑器主体（根据模式切换）
+            // 编辑器主体（Stack: 编辑区 + 搜索栏 overlay）
             Expanded(
-              child: _buildEditorByMode(editorState, editorNotifier),
+              child: Stack(
+                children: [
+                  // 编辑器（根据模式切换）
+                  _buildEditorByMode(editorState, editorNotifier),
+
+                  // 搜索替换栏（浮动在编辑器右上角 overlay）
+                  if (searchState.isVisible)
+                    Positioned(
+                      top: 8,
+                      right: 20,
+                      child: SearchReplaceBar(
+                        getDocumentContent: _getCurrentContent,
+                        onReplace: (newContent) {
+                          if (editorState.mode == EditorMode.wysiwyg) {
+                            _wysiwygKey.currentState?.loadContent(newContent);
+                          }
+                          ref.read(editorProvider.notifier).updateMarkdown(newContent);
+                        },
+                      ),
+                    ),
+                ],
+              ),
             ),
 
             // 底部状态栏：模式切换器
@@ -157,23 +246,20 @@ class _EditorArea extends ConsumerWidget {
     );
   }
 
-  /// 保存当前文档
-  void _saveCurrentDocument(WidgetRef ref) {
-    final tabState = ref.read(tabBarProvider);
-    final activeDoc = tabState.activeDocument;
-    if (activeDoc == null) return;
+  /// 格式化操作处理
+  void _handleFormatAction(String type, EditorNotifier notifier) {
+    // 格式化操作由 floating toolbar 处理，工具栏按钮作为额外入口
+    // 对应 marktext formatCtrl.format(type)
+  }
 
-    // 从 editorProvider 获取最新内容
-    final editorState = ref.read(editorProvider);
-    final docToSave = activeDoc.copyWith(content: editorState.markdown);
+  /// 块类型操作处理
+  void _handleBlockAction(String type, EditorNotifier notifier) {
+    // 块操作由 floating toolbar 处理
+  }
 
-    ref.read(fileProvider.notifier).saveFile(docToSave).then((success) {
-      if (success) {
-        ref.read(editorProvider.notifier).markSaved();
-        // 同步标签栏文档状态
-        ref.read(tabBarProvider.notifier).updateTabSaved(activeDoc.id);
-      }
-    });
+  /// 插入操作处理
+  void _handleInsertAction(String type, EditorNotifier notifier) {
+    // 插入操作由 floating toolbar 处理
   }
 
   /// 打开文件（通过文件选择器）
@@ -197,20 +283,30 @@ class _EditorArea extends ConsumerWidget {
   /// 根据当前模式构建对应的编辑器
   Widget _buildEditorByMode(AppEditorState state, EditorNotifier notifier) {
     return switch (state.mode) {
-      // WYSIWYG 模式：编辑器内部自管理文档状态，仅标记脏状态
-      // 避免 state.markdown 变化触发整个编辑器重建的死循环
       EditorMode.wysiwyg => WysiwygEditor(
-          key: const ValueKey('wysiwyg'),
+          key: _wysiwygKey,
           initialContent: state.markdown,
-          onContentChanged: (_) => notifier.updateMarkdown('', markDirtyOnly: true),
+          typewriterMode: state.isTypewriterMode,
+          focusMode: state.isFocusMode,
+          onContentChanged: (content) {
+            // 同步内容到 provider（用 syncContent 避免标记脏状态之外的问题）
+            notifier.syncContent(content);
+            _scheduleAutoSave();
+          },
         ),
       EditorMode.sourceCode => SourceEditor(
           initialContent: state.markdown,
-          onContentChanged: (content) => notifier.updateMarkdown(content),
+          onContentChanged: (content) {
+            notifier.updateMarkdown(content);
+            _scheduleAutoSave();
+          },
         ),
       EditorMode.splitView => SplitView(
           initialContent: state.markdown,
-          onContentChanged: (content) => notifier.updateMarkdown(content),
+          onContentChanged: (content) {
+            notifier.updateMarkdown(content);
+            _scheduleAutoSave();
+          },
         ),
     };
   }
@@ -245,6 +341,20 @@ class _EditorArea extends ConsumerWidget {
                 color: theme.colorScheme.primary,
               ),
             ),
+          // 焦点模式指示
+          if (state.isFocusMode) ...[
+            const SizedBox(width: 8),
+            Icon(Icons.center_focus_strong, size: 12, color: theme.colorScheme.secondary),
+            const SizedBox(width: 2),
+            Text('Focus', style: TextStyle(fontSize: 11, color: theme.colorScheme.secondary)),
+          ],
+          // 打字机模式指示
+          if (state.isTypewriterMode) ...[
+            const SizedBox(width: 8),
+            Icon(Icons.keyboard_double_arrow_down, size: 12, color: theme.colorScheme.tertiary),
+            const SizedBox(width: 2),
+            Text('Typewriter', style: TextStyle(fontSize: 11, color: theme.colorScheme.tertiary)),
+          ],
           const Spacer(),
           // 右侧：模式切换器
           ModeSwitcher(
