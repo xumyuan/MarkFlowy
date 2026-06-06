@@ -69,6 +69,10 @@ class WysiwygEditorState extends State<WysiwygEditor> {
   /// 编辑器是否已初始化
   bool _initialized = false;
 
+  /// 编辑器代数 —— 每次重建 EditorState 自增，
+  /// 用于强制 Flutter 重建 AppFlowyEditor 的 State（否则会复用旧 EditorState）
+  int _editorGeneration = 0;
+
   @override
   void initState() {
     super.initState();
@@ -147,6 +151,9 @@ class WysiwygEditorState extends State<WysiwygEditor> {
       }
     });
 
+    // 递增代数：强制 Flutter 重建 AppFlowyEditor 的 State
+    // 否则 AppFlowyEditor 会复用旧的 State，继续引用已 dispose 的旧 EditorState
+    _editorGeneration++;
     setState(() {});
   }
 
@@ -183,6 +190,7 @@ class WysiwygEditorState extends State<WysiwygEditor> {
         editorScrollController: _scrollController,
         textDirection: TextDirection.ltr,
         child: AppFlowyEditor(
+          key: ValueKey('editor_gen_$_editorGeneration'),
           editorState: _editorState,
           editorScrollController: _scrollController,
           autoFocus: widget.autoFocus,
