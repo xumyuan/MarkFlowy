@@ -113,7 +113,7 @@ class _EditorAreaState extends ConsumerState<_EditorArea> {
   void _handlePendingFileOpen() {
     final path = consumePendingOpenFile();
     // 使用沙箱内的 HOME（macOS App Sandbox 重定向了 HOME）
-    final debugPath = '${Platform.environment['HOME']}/test_codeblock.md';
+    final debugPath = '${Platform.environment['HOME']}/test_all_md.md';
     final file = File(path ?? debugPath);
     if (!file.existsSync()) return;
 
