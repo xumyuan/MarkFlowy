@@ -520,6 +520,7 @@ class _EditorAreaState extends ConsumerState<_EditorArea> {
           focusMode: state.isFocusMode,
           onContentChanged: (content) {
             notifier.syncContent(content);
+            _syncToTab(content);
             _scheduleAutoSave();
           },
         ),
@@ -528,6 +529,7 @@ class _EditorAreaState extends ConsumerState<_EditorArea> {
           searchHighlight: searchHighlight,
           onContentChanged: (content) {
             notifier.updateMarkdown(content);
+            _syncToTab(content);
             _scheduleAutoSave();
           },
         ),
@@ -536,10 +538,20 @@ class _EditorAreaState extends ConsumerState<_EditorArea> {
           searchHighlight: searchHighlight,
           onContentChanged: (content) {
             notifier.updateMarkdown(content);
+            _syncToTab(content);
             _scheduleAutoSave();
           },
         ),
     };
+  }
+
+  /// 同步内容到 TabBarProvider（使 TOC、文件保存等能拿到最新内容）
+  void _syncToTab(String content) {
+    final tabState = ref.read(tabBarProvider);
+    final activeId = tabState.activeTabId;
+    if (activeId != null) {
+      ref.read(tabBarProvider.notifier).updateTabContent(activeId, content);
+    }
   }
 
   /// 构建底部状态栏（包含模式切换器）

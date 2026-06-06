@@ -10,8 +10,8 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../providers/editor_provider.dart';
 import '../../utils/strings.dart';
-import '../../widgets/tabs/tab_bar.dart';
 
 /// TOC 条目数据
 class TocEntry {
@@ -35,14 +35,12 @@ class TocEntry {
   });
 }
 
-/// TOC Provider — 从当前文档内容解析目录
+/// TOC Provider — 从编辑器实时内容解析目录
+/// 直接监听 editorProvider.markdown，确保编辑时实时更新
 final tocProvider = Provider<List<TocEntry>>((ref) {
-  final tabState = ref.watch(tabBarProvider);
-  final activeDoc = tabState.activeDocument;
-  if (activeDoc == null || activeDoc.content.isEmpty) {
-    return [];
-  }
-  return _parseToc(activeDoc.content);
+  final editorState = ref.watch(editorProvider);
+  if (editorState.markdown.isEmpty) return [];
+  return _parseToc(editorState.markdown);
 });
 
 /// 解析 Markdown 内容中的标题生成 TOC
