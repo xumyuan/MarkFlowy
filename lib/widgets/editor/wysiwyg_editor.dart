@@ -124,6 +124,18 @@ class WysiwygEditorState extends State<WysiwygEditor> {
       editorState: _editorState,
       shrinkWrap: false,
     );
+
+    // 重新注册事务监听器（原来的已被 dispose 移除）
+    _editorState.transactionStream.listen((event) {
+      if (event.$1 == TransactionTime.after && _initialized) {
+        _isInternalChange = true;
+        final newMarkdown = MarkdownUtils.docToMarkdown(_editorState.document);
+        _lastExternalContent = newMarkdown;
+        widget.onContentChanged?.call(newMarkdown);
+        _isInternalChange = false;
+      }
+    });
+
     setState(() {});
   }
 

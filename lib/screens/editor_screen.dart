@@ -23,6 +23,7 @@ library;
 import 'dart:async';
 import 'dart:io';
 
+import 'package:appflowy_editor/appflowy_editor.dart' as appflowy;
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -229,16 +230,10 @@ class _EditorAreaState extends ConsumerState<_EditorArea> {
     final result = await imageService.pickImage(action: ImageInsertAction.path);
     if (result == null) return;
 
-    // 插入图片 Markdown 语法
     final editorState = ref.read(editorProvider);
     if (editorState.mode == EditorMode.wysiwyg) {
-      // WYSIWYG：追加到文档末尾
-      final content = _getCurrentContent();
-      final newContent = content.isEmpty
-          ? result.toMarkdown()
-          : '$content\n\n${result.toMarkdown()}';
-      _wysiwygKey.currentState?.loadContent(newContent);
-      ref.read(editorProvider.notifier).syncContent(newContent);
+      // WYSIWYG：通过 appflowy_editor 事务直接插入 imageNode
+      _insertWysiwygImage(result.absolutePath ?? result.markdownPath);
     } else {
       final content = _getCurrentContent();
       final newContent = content.isEmpty
@@ -246,6 +241,31 @@ class _EditorAreaState extends ConsumerState<_EditorArea> {
           : '$content\n\n${result.toMarkdown()}';
       ref.read(editorProvider.notifier).updateMarkdown(newContent);
     }
+  }
+
+  /// 通过 appflowy_editor 事务直接插入图片节点（绕过 markdown 解析）
+  void _insertWysiwygImage(String filePath) {
+    final wysiwygState = _wysiwygKey.currentState;
+    if (wysiwygState == null) return;
+    final editorState = wysiwygState.editorState;
+    final transaction = editorState.transaction;
+
+    // 使用 appflowy_editor 内置的 imageNode() 创建图片节点（绕过 markdown 解析）
+    final node = appflowy.imageNode(url: filePath);
+    final lastIndex = editorState.document.root.children.length;
+
+    // 先插入一个空段落，再插入图片节点
+    if (lastIndex > 0) {
+      transaction.insertNode([lastIndex], node);
+    } else {
+      transaction.insertNode([0], node);
+    }
+
+    editorState.apply(transaction);
+
+    // 同步 markdown 内容到 provider
+    final newMarkdown = wysiwygState.getMarkdown();
+    ref.read(editorProvider.notifier).syncContent(newMarkdown);
   }
 
   /// 处理插入链接
