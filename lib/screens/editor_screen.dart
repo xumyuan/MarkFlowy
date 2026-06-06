@@ -115,11 +115,9 @@ class _EditorAreaState extends ConsumerState<_EditorArea> {
     // 使用沙箱内的 HOME（macOS App Sandbox 重定向了 HOME）
     final debugPath = '${Platform.environment['HOME']}/test_codeblock.md';
     final file = File(path ?? debugPath);
-    print('[EDITOR] _handlePendingFileOpen: path=${file.path} exists=${file.existsSync()}');
     if (!file.existsSync()) return;
 
     file.readAsString().then((content) {
-      print('[EDITOR] file loaded: ${content.length} chars, starts with "${content.substring(0, content.length.clamp(0, 80))}"');
       final doc = Document(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         filePath: file.path,
