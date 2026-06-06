@@ -8,12 +8,23 @@
 /// - 焦点模式（focus）：高亮当前段落，淡化其他内容
 /// - 浮动工具栏（FloatingToolbar）
 /// - 内容同步（通过 GlobalKey 暴露 getMarkdown）
+/// - 代码块语法高亮（自定义 CodeBlockComponentBuilder）
 library;
 
 import 'package:appflowy_editor/appflowy_editor.dart';
 import 'package:flutter/material.dart';
 
 import '../../utils/markdown_utils.dart';
+import 'code_block.dart';
+
+/// 合并标准组件构建器和自定义构建器的映射
+///
+/// appflowy_editor 6.2.0 不原生支持 code_block 节点类型，
+/// 这里注册自定义的代码块构建器（语法高亮）
+final Map<String, BlockComponentBuilder> _blockComponentBuilders = {
+  ...standardBlockComponentBuilderMap,
+  CodeBlockKeys.type: CodeBlockComponentBuilder(),
+};
 
 /// WYSIWYG 所见即所得编辑器
 class WysiwygEditor extends StatefulWidget {
@@ -176,7 +187,7 @@ class WysiwygEditorState extends State<WysiwygEditor> {
           editorScrollController: _scrollController,
           autoFocus: widget.autoFocus,
           editorStyle: _buildEditorStyle(context),
-          blockComponentBuilders: standardBlockComponentBuilderMap,
+          blockComponentBuilders: _blockComponentBuilders,
           commandShortcutEvents: standardCommandShortcutEvents,
           footer: _buildFooter(),
         ),

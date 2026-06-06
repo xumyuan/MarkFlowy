@@ -8,10 +8,22 @@ library;
 
 import 'package:appflowy_editor/appflowy_editor.dart';
 
+import '../widgets/editor/code_block.dart';
+
 /// Markdown 工具类
 /// 封装 appflowy_editor 的 Markdown 转换功能
 class MarkdownUtils {
   MarkdownUtils._();
+
+  /// 自定义 markdown 解析器（用于解析 appflowy_editor 不原生支持的语法）
+  static const _customMarkdownParsers = [
+    CodeBlockMarkdownParser(),
+  ];
+
+  /// 自定义节点编码器（用于将自定义节点导出为 markdown）
+  static const _customNodeParsers = [
+    CustomCodeBlockNodeParser(),
+  ];
 
   /// 将 Markdown 字符串转换为 appflowy_editor Document
   /// 用于加载文件时将 Markdown 内容渲染到编辑器中
@@ -19,7 +31,10 @@ class MarkdownUtils {
   /// 对应 marktext editor.vue onMounted 中:
   /// `editor.value = new Muya(ele, { markdown: props.markdown, ... })`
   static Document markdownToDoc(String markdown) {
-    return markdownToDocument(markdown);
+    return markdownToDocument(
+      markdown,
+      markdownParsers: _customMarkdownParsers,
+    );
   }
 
   /// 将 appflowy_editor Document 转换为 Markdown 字符串
@@ -27,7 +42,10 @@ class MarkdownUtils {
   ///
   /// 对应 marktext contentState 中的 getMarkdown() 方法
   static String docToMarkdown(Document document) {
-    return documentToMarkdown(document);
+    return documentToMarkdown(
+      document,
+      customParsers: _customNodeParsers,
+    );
   }
 
   /// 创建一个空白文档（包含一个空段落）
