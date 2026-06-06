@@ -1,13 +1,13 @@
 # MarkFlowy
 **一个基于 Flutter 的跨平台 Markdown 编辑器**
 灵感来自 [MarkText](https://github.com/marktext/marktext)，使用 [AppFlowy Editor](https://github.com/AppFlowy-IO/appflowy-editor) 构建
-
-[![CI](https://github.com/xumyuan/MarkFlowy/actions/workflows/ci.yml/badge.svg)](https://github.com/xumyuan/MarkFlowy/actions/workflows/ci.yml)
-[![Release](https://github.com/xumyuan/MarkFlowy/actions/workflows/release.yml/badge.svg)](https://github.com/xumyuan/MarkFlowy/actions/workflows/release.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-
-[English](README_EN.md) | 中文
----
+[
+]([https://github.com/xumyuan/MarkFlowy/actions/workflows/ci.yml](https://github.com/xumyuan/MarkFlowy/actions/workflows/ci.yml))
+[
+]([https://github.com/xumyuan/MarkFlowy/actions/workflows/release.yml](https://github.com/xumyuan/MarkFlowy/actions/workflows/release.yml))
+[
+](LICENSE)
+## [English](README_EN.md) | 中文
 ## 功能特性
 * **所见即所得编辑** — 基于 AppFlowy Editor 的富文本编辑，支持粗体、斜体、标题、列表、引用、代码块等
 * **三种编辑模式** — WYSIWYG / 源码模式 / 分屏预览，随时切换
@@ -21,33 +21,33 @@
 ## 快速开始
 ### 下载安装
 前往 [Releases](https://github.com/xumyuan/MarkFlowy/releases) 页面下载最新版本：
-| 平台 | 下载 |
-| --- | --- |
-| macOS | `MarkFlowy-macOS.zip` |
-| Windows | `MarkFlowy-Windows.zip` |
+|平台|下载|
+|-|-|
+|macOS|`MarkFlowy-macOS.zip`|
+|Windows|`MarkFlowy-Windows.zip`|
 ### 从源码构建
 ## 开发环境配置
 ### 前置要求
-| 工具 | 版本 |
-| --- | --- |
-| Flutter | >= 3.11.5 (stable) |
-| Dart | >= 3.11.5 |
-| Xcode | >= 15.0（macOS 开发） |
-| Visual Studio | >= 2022（Windows 开发） |
-| CocoaPods | 最新版（macOS 开发） |
+|工具|版本|
+|-|-|
+|Flutter|>= 3.11.5 (stable)|
+|Dart|>= 3.11.5|
+|Xcode|>= 15.0（macOS 开发）|
+|Visual Studio|>= 2022（Windows 开发）|
+|CocoaPods|最新版（macOS 开发）|
 ### 环境搭建
 ### 常用命令
 ## 项目结构
 ## 技术栈
-| 类别 | 技术 |
-| --- | --- |
-| 框架 | Flutter 3.11+ |
-| 编辑器 | [AppFlowy Editor](https://github.com/AppFlowy-IO/appflowy-editor) |
-| 状态管理 | [Riverpod](https://riverpod.dev/) |
-| 路由 | [GoRouter](https://pub.dev/packages/go_router) |
-| 桌面窗口 | [window_manager](https://pub.dev/packages/window_manager) |
-| PDF 导出 | [pdf](https://pub.dev/packages/pdf) + [printing](https://pub.dev/packages/printing) |
-| 主题 | 自定义 ThemeData（参考 MarkText 原始 CSS） |
+|类别|技术|
+|-|-|
+|框架|Flutter 3.11+|
+|编辑器|[AppFlowy Editor](https://github.com/AppFlowy-IO/appflowy-editor)|
+|状态管理|[Riverpod](https://riverpod.dev/)|
+|路由|[GoRouter](https://pub.dev/packages/go_router)|
+|桌面窗口|[window_manager](https://pub.dev/packages/window_manager)|
+|PDF 导出|[pdf](https://pub.dev/packages/pdf) + [printing](https://pub.dev/packages/printing)|
+|主题|自定义 ThemeData（参考 MarkText 原始 CSS）|
 ## 贡献
 欢迎贡献！请遵循以下步骤：
 1. Fork 本仓库

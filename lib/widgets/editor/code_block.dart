@@ -1,9 +1,7 @@
 /// 代码块节点定义、解析器和渲染器
-/// 
-/// appflowy_editor 6.2.0 不原生支持 fenced code blocks 的 WYSIWYG 渲染，
-/// 这里实现自定义的代码块解析（markdown → 节点）和渲染（节点 → widgets）。
 ///
-/// 参考: marktext/src/muya/lib/contentState/codeBlockCtrl.js
+/// appflowy_editor 6.2.0 不原生支持 fenced code blocks，
+/// 这里实现自定义的 markdown → 节点 解析 和 节点 → widget 渲染。
 library;
 
 import 'package:appflowy_editor/appflowy_editor.dart';
@@ -13,40 +11,24 @@ import 'package:flutter_highlight/themes/github.dart';
 import 'package:markdown/markdown.dart' as md;
 import 'package:provider/provider.dart';
 
-// ============ 代码块节点类型定义 ============
+// ============ 节点类型定义 ============
 
-/// 代码块节点的属性键
 class CodeBlockKeys {
   CodeBlockKeys._();
-
   static const String type = 'code_block';
-
-  /// 编程语言（如 dart, python, javascript）
   static const String language = 'language';
-
-  /// 代码文本内容（存储为纯文本）
   static const String code = 'code';
 }
 
-/// 创建代码块节点
-Node codeBlockNode({
-  required String code,
-  String language = '',
-}) {
-  return Node(
-    type: CodeBlockKeys.type,
-    attributes: {
-      CodeBlockKeys.language: language,
-      CodeBlockKeys.code: code,
-    },
-  );
+Node codeBlockNode({required String code, String language = ''}) {
+  return Node(type: CodeBlockKeys.type, attributes: {
+    CodeBlockKeys.language: language,
+    CodeBlockKeys.code: code,
+  });
 }
 
 // ============ Markdown → 节点 解析器 ============
 
-/// 自定义 Markdown 解析器：将 fenced code blocks 解析为代码块节点
-///
-/// 对应 marktext 中 muya 的 code block parser
 class CodeBlockMarkdownParser extends CustomMarkdownParser {
   const CodeBlockMarkdownParser();
 
@@ -57,48 +39,26 @@ class CodeBlockMarkdownParser extends CustomMarkdownParser {
     MarkdownListType listType = MarkdownListType.unknown,
     int? startNumber,
   }) {
-    // 处理 <pre><code> 结构（来自 fenced code blocks）
-    if (element is! md.Element) {
-      return [];
+    if (element is! md.Element || element.tag != 'pre') return [];
+
+    md.Element? codeEl;
+    for (final c in element.children ?? <md.Node>[]) {
+      if (c is md.Element && c.tag == 'code') { codeEl = c; break; }
+    }
+    if (codeEl == null) return [];
+
+    String lang = '';
+    final cls = codeEl.attributes['class'];
+    if (cls != null && cls.startsWith('language-')) {
+      lang = cls.substring('language-'.length);
     }
 
-    if (element.tag != 'pre') {
-      return [];
-    }
-
-    // 提取 <code> 子元素
-    md.Element? codeElement;
-    for (final child in element.children ?? []) {
-      if (child is md.Element && child.tag == 'code') {
-        codeElement = child;
-        break;
-      }
-    }
-
-    if (codeElement == null) {
-      return [];
-    }
-
-    // 提取语言信息
-    String language = '';
-    final classAttr = codeElement.attributes['class'];
-    if (classAttr != null && classAttr.startsWith('language-')) {
-      language = classAttr.substring('language-'.length);
-    }
-
-    // 提取代码文本
-    final codeText = codeElement.textContent;
-
-    return [codeBlockNode(code: codeText, language: language)];
+    return [codeBlockNode(code: codeEl.textContent, language: lang)];
   }
 }
 
 // ============ 节点 → Markdown 编码器 ============
 
-/// 将自定义 code_block 节点转换回 Markdown fenced code block
-///
-/// 与 appflowy_editor 内置的 CodeBlockNodeParser（处理 'code' 类型）区分，
-/// 本类处理自定义的 'code_block' 节点类型。
 class CustomCodeBlockNodeParser extends NodeParser {
   const CustomCodeBlockNodeParser();
 
@@ -107,43 +67,28 @@ class CustomCodeBlockNodeParser extends NodeParser {
 
   @override
   String transform(Node node, DocumentMarkdownEncoder? encoder) {
-    final language = node.attributes[CodeBlockKeys.language] ?? '';
+    final lang = node.attributes[CodeBlockKeys.language] ?? '';
     final code = node.attributes[CodeBlockKeys.code] ?? '';
-
-    if (code.isEmpty) {
-      // 空代码块
-      return '```$language\n\n```\n';
-    }
-
-    final suffix = node.next == null ? '' : '\n';
-    return '```$language\n$code\n```$suffix';
+    return '```$lang\n$code\n```\n';
   }
 }
 
-// ============ 代码块渲染器（WYSIWYG 中显示语法高亮） ============
+// ============ 渲染器 ============
 
-/// 代码块组件构建器
-///
-/// 在 WYSIWYG 编辑器中渲染带语法高亮的代码块
 class CodeBlockComponentBuilder extends BlockComponentBuilder {
   CodeBlockComponentBuilder({super.configuration});
 
   @override
   BlockComponentWidget build(BlockComponentContext blockComponentContext) {
     final node = blockComponentContext.node;
-    return CodeBlockComponentWidget(
+    return _CodeBlockWidget(
       key: node.key,
       node: node,
       showActions: showActions(node),
       configuration: configuration,
-      actionBuilder: (context, state) => actionBuilder(
-        blockComponentContext,
-        state,
-      ),
-      actionTrailingBuilder: (context, state) => actionTrailingBuilder(
-        blockComponentContext,
-        state,
-      ),
+      actionBuilder: (c, s) => actionBuilder(blockComponentContext, s),
+      actionTrailingBuilder: (c, s) =>
+          actionTrailingBuilder(blockComponentContext, s),
     );
   }
 
@@ -152,9 +97,8 @@ class CodeBlockComponentBuilder extends BlockComponentBuilder {
       (node) => node.type == CodeBlockKeys.type;
 }
 
-/// 代码块组件 Widget
-class CodeBlockComponentWidget extends BlockComponentStatefulWidget {
-  const CodeBlockComponentWidget({
+class _CodeBlockWidget extends BlockComponentStatefulWidget {
+  const _CodeBlockWidget({
     super.key,
     required super.node,
     super.showActions,
@@ -164,13 +108,13 @@ class CodeBlockComponentWidget extends BlockComponentStatefulWidget {
   });
 
   @override
-  State<CodeBlockComponentWidget> createState() =>
-      _CodeBlockComponentWidgetState();
+  State<_CodeBlockWidget> createState() => _CodeBlockWidgetState();
 }
 
-class _CodeBlockComponentWidgetState extends State<CodeBlockComponentWidget>
+class _CodeBlockWidgetState extends State<_CodeBlockWidget>
     with SelectableMixin, BlockComponentConfigurable {
-  final codeBlockKey = GlobalKey();
+  final _key = GlobalKey();
+  RenderBox? get _renderBox => context.findRenderObject() as RenderBox?;
 
   @override
   BlockComponentConfiguration get configuration => widget.configuration;
@@ -180,22 +124,66 @@ class _CodeBlockComponentWidgetState extends State<CodeBlockComponentWidget>
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final language = node.attributes[CodeBlockKeys.language] ?? '';
-    final code = node.attributes[CodeBlockKeys.code] ?? '';
     final editorState = context.read<EditorState>();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final lang = node.attributes[CodeBlockKeys.language] ?? '';
+    final code = node.attributes[CodeBlockKeys.code] ?? '';
 
-    final hasLanguage = language.isNotEmpty;
-
-    Widget child;
-
+    // 代码内容
+    Widget content;
     if (code.trim().isEmpty) {
-      child = Container(
+      content = _emptyPlaceholder(isDark, lang);
+    } else {
+      content = HighlightView(
+        code,
+        language: lang.isNotEmpty ? lang : 'plaintext',
+        theme: isDark ? _darkTheme : githubTheme,
+        padding: const EdgeInsets.all(16),
+        textStyle:
+            const TextStyle(fontFamily: 'monospace', fontSize: 13),
+      );
+    }
+
+    // 语言标签
+    Widget child = lang.isNotEmpty
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _langBar(isDark, lang),
+              ClipRRect(
+                borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(8),
+                    bottomRight: Radius.circular(8)),
+                child: content,
+              ),
+            ],
+          )
+        : content;
+
+    // padding + key（用于 getRectsInSelection 定位）
+    child = Padding(key: _key, padding: padding, child: child);
+
+    // BlockSelectionContainer
+    child = BlockSelectionContainer(
+      node: node,
+      delegate: this,
+      listenable: editorState.selectionNotifier,
+      remoteSelection: editorState.remoteSelections,
+      blockColor: editorState.editorStyle.selectionColor,
+      cursorColor: editorState.editorStyle.cursorColor,
+      selectionColor: editorState.editorStyle.selectionColor,
+      supportTypes: BlockSelectionType.values,
+      child: child,
+    );
+
+    return child;
+  }
+
+  Widget _emptyPlaceholder(bool isDark, String lang) => Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: isDark
-              ? const Color(0xFF0D1117)
-              : const Color(0xFFF6F8FA),
+          color: isDark ? const Color(0xFF0D1117) : const Color(0xFFF6F8FA),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: isDark
@@ -204,7 +192,7 @@ class _CodeBlockComponentWidgetState extends State<CodeBlockComponentWidget>
           ),
         ),
         child: Text(
-          hasLanguage ? '$language (empty)' : 'Empty code block',
+          lang.isNotEmpty ? '$lang (empty)' : 'Empty code block',
           style: TextStyle(
             fontFamily: 'monospace',
             fontSize: 13,
@@ -215,121 +203,31 @@ class _CodeBlockComponentWidgetState extends State<CodeBlockComponentWidget>
           ),
         ),
       );
-    } else {
-      child = HighlightView(
-        code,
-        language: hasLanguage ? language : 'plaintext',
-        theme: isDark ? _githubDarkTheme : githubTheme,
-        padding: const EdgeInsets.all(16),
-        textStyle: const TextStyle(
-          fontFamily: 'monospace',
-          fontSize: 13,
+
+  Widget _langBar(bool isDark, String lang) => Container(
+        width: double.infinity,
+        padding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        decoration: BoxDecoration(
+          color:
+              isDark ? const Color(0xFF161B22) : const Color(0xFFEBECF0),
+          borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(8),
+              topRight: Radius.circular(8)),
+        ),
+        child: Text(
+          lang,
+          style: TextStyle(
+            fontSize: 11,
+            fontFamily: 'monospace',
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.5)
+                : Colors.black.withValues(alpha: 0.5),
+          ),
         ),
       );
-    }
 
-    // 添加语言标签
-    if (hasLanguage) {
-      child = Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // 语言标签栏
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            decoration: BoxDecoration(
-              color: isDark
-                  ? const Color(0xFF161B22)
-                  : const Color(0xFFEBECF0),
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(8),
-                topRight: Radius.circular(8),
-              ),
-            ),
-            child: Text(
-              language,
-              style: TextStyle(
-                fontSize: 11,
-                fontFamily: 'monospace',
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.5)
-                    : Colors.black.withValues(alpha: 0.5),
-              ),
-            ),
-          ),
-          // 代码块主体
-          ClipRRect(
-            borderRadius: const BorderRadius.only(
-              bottomLeft: Radius.circular(8),
-              bottomRight: Radius.circular(8),
-            ),
-            child: child,
-          ),
-        ],
-      );
-    }
-
-    // 块选择容器
-    child = Padding(
-      key: codeBlockKey,
-      padding: padding,
-      child: child,
-    );
-
-    child = BlockSelectionContainer(
-      node: node,
-      delegate: this,
-      listenable: editorState.selectionNotifier,
-      remoteSelection: editorState.remoteSelections,
-      blockColor: editorState.editorStyle.selectionColor,
-      cursorColor: editorState.editorStyle.cursorColor,
-      selectionColor: editorState.editorStyle.selectionColor,
-      supportTypes: const [
-        BlockSelectionType.block,
-        BlockSelectionType.cursor,
-        BlockSelectionType.selection,
-      ],
-      child: child,
-    );
-
-    return child;
-  }
-
-  /// GitHub Dark 主题（与 split_view.dart 保持一致）
-  static final _githubDarkTheme = {
-    'root': const TextStyle(
-      backgroundColor: Color(0xFF0D1117),
-      color: Color(0xFFC9D1D9),
-    ),
-    'comment': const TextStyle(
-      color: Color(0xFF8B949E),
-      fontStyle: FontStyle.italic,
-    ),
-    'keyword': const TextStyle(color: Color(0xFFFF7B72)),
-    'string': const TextStyle(color: Color(0xFFA5D6FF)),
-    'number': const TextStyle(color: Color(0xFF79C0FF)),
-    'title': const TextStyle(color: Color(0xFFD2A8FF)),
-    'type': const TextStyle(color: Color(0xFFFFA657)),
-    'function': const TextStyle(color: Color(0xFFD2A8FF)),
-    'built_in': const TextStyle(color: Color(0xFFFFA657)),
-    'literal': const TextStyle(color: Color(0xFF79C0FF)),
-    'params': const TextStyle(color: Color(0xFFC9D1D9)),
-    'attr': const TextStyle(color: Color(0xFF79C0FF)),
-    'meta': const TextStyle(color: Color(0xFFC9D1D9)),
-    'tag': const TextStyle(color: Color(0xFFFF7B72)),
-    'name': const TextStyle(color: Color(0xFFD2A8FF)),
-    'attribute': const TextStyle(color: Color(0xFF79C0FF)),
-    'selector-tag': const TextStyle(color: Color(0xFF7EE787)),
-    'selector-id': const TextStyle(color: Color(0xFFD2A8FF)),
-    'selector-class': const TextStyle(color: Color(0xFFD2A8FF)),
-    'selector-pseudo': const TextStyle(color: Color(0xFFD2A8FF)),
-    'variable': const TextStyle(color: Color(0xFFFFA657)),
-    'deletion': const TextStyle(color: Color(0xFFFF7B72)),
-    'addition': const TextStyle(color: Color(0xFF7EE787)),
-  };
-
-  // ========== 选择/光标相关 ==========
+  // ========== SelectableMixin ==========
 
   @override
   Position start() => Position(path: node.path, offset: 0);
@@ -338,7 +236,7 @@ class _CodeBlockComponentWidgetState extends State<CodeBlockComponentWidget>
   Position end() => Position(path: node.path, offset: 1);
 
   @override
-  Position getPositionInOffset(Offset start) => Position(path: node.path, offset: 0);
+  Position getPositionInOffset(Offset start) => end();
 
   @override
   bool get shouldCursorBlink => false;
@@ -347,60 +245,55 @@ class _CodeBlockComponentWidgetState extends State<CodeBlockComponentWidget>
   CursorStyle get cursorStyle => CursorStyle.cover;
 
   @override
-  Rect getBlockRect({bool shiftWithBaseOffset = false}) {
-    return getRectsInSelection(Selection.invalid(),
-        shiftWithBaseOffset: shiftWithBaseOffset).first;
-  }
+  Rect getBlockRect({bool shiftWithBaseOffset = false}) =>
+      getRectsInSelection(Selection.invalid(),
+          shiftWithBaseOffset: shiftWithBaseOffset).first;
 
   @override
-  Rect? getCursorRectInPosition(
-    Position position, {
-    bool shiftWithBaseOffset = false,
-  }) {
-    final box = context.findRenderObject() as RenderBox?;
-    if (box == null) return null;
-    return getRectsInSelection(
-      Selection.collapsed(position),
-      shiftWithBaseOffset: shiftWithBaseOffset,
-    ).firstOrNull;
-  }
+  Rect? getCursorRectInPosition(Position position,
+          {bool shiftWithBaseOffset = false}) =>
+      getRectsInSelection(Selection.collapsed(position),
+              shiftWithBaseOffset: shiftWithBaseOffset)
+          .firstOrNull;
 
   @override
-  List<Rect> getRectsInSelection(
-    Selection selection, {
-    bool shiftWithBaseOffset = false,
-  }) {
-    final box = context.findRenderObject() as RenderBox?;
-    if (box == null) return [];
+  List<Rect> getRectsInSelection(Selection selection,
+      {bool shiftWithBaseOffset = false}) {
+    final renderBox = _renderBox;
+    if (renderBox == null) return [];
     final parentBox = context.findRenderObject();
-    final codeBox = codeBlockKey.currentContext?.findRenderObject();
-    if (parentBox is RenderBox && codeBox is RenderBox) {
+    final innerBox = _key.currentContext?.findRenderObject();
+    if (parentBox is RenderBox && innerBox is RenderBox) {
       return [
         (shiftWithBaseOffset
-                ? codeBox.localToGlobal(Offset.zero, ancestor: parentBox)
+                ? innerBox.localToGlobal(Offset.zero, ancestor: parentBox)
                 : Offset.zero) &
-            codeBox.size,
+            innerBox.size
       ];
     }
-    return [Offset.zero & box.size];
+    return [Offset.zero & renderBox.size];
   }
 
   @override
-  Selection getSelectionInRange(Offset start, Offset end) => Selection.single(
-        path: node.path,
-        startOffset: 0,
-        endOffset: 1,
-      );
+  Selection getSelectionInRange(Offset start, Offset end) =>
+      Selection.single(path: node.path, startOffset: 0, endOffset: 1);
 
   @override
-  Offset localToGlobal(
-    Offset offset, {
-    bool shiftWithBaseOffset = false,
-  }) {
-    final box = context.findRenderObject() as RenderBox?;
-    if (box != null) {
-      return box.localToGlobal(offset);
-    }
-    return offset;
-  }
+  Offset localToGlobal(Offset offset,
+          {bool shiftWithBaseOffset = false}) =>
+      _renderBox!.localToGlobal(offset);
+
+  static final _darkTheme = {
+    'root': const TextStyle(
+        backgroundColor: Color(0xFF0D1117), color: Color(0xFFC9D1D9)),
+    'comment': const TextStyle(
+        color: Color(0xFF8B949E), fontStyle: FontStyle.italic),
+    'keyword': const TextStyle(color: Color(0xFFFF7B72)),
+    'string': const TextStyle(color: Color(0xFFA5D6FF)),
+    'number': const TextStyle(color: Color(0xFF79C0FF)),
+    'title': const TextStyle(color: Color(0xFFD2A8FF)),
+    'type': const TextStyle(color: Color(0xFFFFA657)),
+    'function': const TextStyle(color: Color(0xFFD2A8FF)),
+    'built_in': const TextStyle(color: Color(0xFFFFA657)),
+  };
 }
