@@ -10,10 +10,7 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../providers/editor_provider.dart';
-import '../../providers/search_provider.dart';
 import 'quick_insert.dart';
 
 /// 工具栏按钮定义
@@ -37,7 +34,7 @@ class EditorToolbarItem {
 /// 编辑器工具栏
 /// 对应 marktext FormatPicker + editParagraph 菜单功能
 /// 集成 QuickInsert 面板和 Emoji Picker
-class EditorToolbar extends ConsumerWidget {
+class EditorToolbar extends StatelessWidget {
   /// 格式化按钮点击回调
   final void Function(String type)? onFormatAction;
 
@@ -67,7 +64,7 @@ class EditorToolbar extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     return Container(

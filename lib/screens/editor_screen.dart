@@ -97,9 +97,10 @@ class _EditorAreaState extends ConsumerState<_EditorArea> {
   @override
   void initState() {
     super.initState();
-    // 将所有菜单命令注册到中心化 CommandBus
-    // 这样菜单栏和快捷键都会路由到这些处理器
-    _registerCommands();
+    // 延迟注册命令到 frame 结束后，避免在 widget 构建期间修改 provider
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _registerCommands();
+    });
   }
 
   /// 向 CommandBus 注册所有可处理的命令
