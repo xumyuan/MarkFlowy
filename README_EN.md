@@ -1,14 +1,13 @@
 # MarkFlowy
-**A cross-platform Markdown editor built with Flutter**
+## **A cross-platform Markdown editor built with Flutter**
 Inspired by [MarkText](https://github.com/marktext/marktext), powered by [AppFlowy Editor](https://github.com/AppFlowy-IO/appflowy-editor)
 [
-]([https://github.com/xumyuan/MarkFlowy/actions/workflows/ci.yml](https://github.com/xumyuan/MarkFlowy/actions/workflows/ci.yml))
+](%5Bhttps://github.com/xumyuan/MarkFlowy/actions/workflows/ci.yml%5D(https://github.com/xumyuan/MarkFlowy/actions/workflows/ci.yml))
 [
-]([https://github.com/xumyuan/MarkFlowy/actions/workflows/release.yml](https://github.com/xumyuan/MarkFlowy/actions/workflows/release.yml))
+](%5Bhttps://github.com/xumyuan/MarkFlowy/actions/workflows/release.yml%5D(https://github.com/xumyuan/MarkFlowy/actions/workflows/release.yml))
 [
 ](LICENSE)
 中文 | [English](README_EN.md)
----
 ## Features
 * **WYSIWYG Editing** — Rich text editing powered by AppFlowy Editor, supporting bold, italic, headings, lists, blockquotes, code blocks, and more
 * **Three Editing Modes** — WYSIWYG / Source Code / Split View, switch anytime
