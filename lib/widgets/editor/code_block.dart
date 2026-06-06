@@ -2,6 +2,9 @@
 ///
 /// appflowy_editor 6.2.0 不原生支持 fenced code blocks，
 /// 这里实现自定义的 markdown → 节点 解析 和 节点 → widget 渲染。
+///
+/// 渲染参照 appflowy_editor Image/Diver 块的最佳实践：
+///   内容 → Padding(key) → BlockSelectionContainer → ActionWrapper
 library;
 
 import 'package:appflowy_editor/appflowy_editor.dart';
@@ -43,7 +46,10 @@ class CodeBlockMarkdownParser extends CustomMarkdownParser {
 
     md.Element? codeEl;
     for (final c in element.children ?? <md.Node>[]) {
-      if (c is md.Element && c.tag == 'code') { codeEl = c; break; }
+      if (c is md.Element && c.tag == 'code') {
+        codeEl = c;
+        break;
+      }
     }
     if (codeEl == null) return [];
 
@@ -73,7 +79,7 @@ class CustomCodeBlockNodeParser extends NodeParser {
   }
 }
 
-// ============ 渲染器 ============
+// ============ Builder ============
 
 class CodeBlockComponentBuilder extends BlockComponentBuilder {
   CodeBlockComponentBuilder({super.configuration});
@@ -97,6 +103,8 @@ class CodeBlockComponentBuilder extends BlockComponentBuilder {
       (node) => node.type == CodeBlockKeys.type;
 }
 
+// ============ Widget ============
+
 class _CodeBlockWidget extends BlockComponentStatefulWidget {
   const _CodeBlockWidget({
     super.key,
@@ -113,7 +121,9 @@ class _CodeBlockWidget extends BlockComponentStatefulWidget {
 
 class _CodeBlockWidgetState extends State<_CodeBlockWidget>
     with SelectableMixin, BlockComponentConfigurable {
-  final _key = GlobalKey();
+  final _contentKey = GlobalKey();
+
+  // Image/Diver 模式：通过 _renderBox 获取组件尺寸
   RenderBox? get _renderBox => context.findRenderObject() as RenderBox?;
 
   @override
@@ -129,40 +139,49 @@ class _CodeBlockWidgetState extends State<_CodeBlockWidget>
     final lang = node.attributes[CodeBlockKeys.language] ?? '';
     final code = node.attributes[CodeBlockKeys.code] ?? '';
 
-    // 代码内容
-    Widget content;
-    if (code.trim().isEmpty) {
-      content = _emptyPlaceholder(isDark, lang);
-    } else {
-      content = HighlightView(
-        code,
-        language: lang.isNotEmpty ? lang : 'plaintext',
-        theme: isDark ? _darkTheme : githubTheme,
-        padding: const EdgeInsets.all(16),
-        textStyle:
-            const TextStyle(fontFamily: 'monospace', fontSize: 13),
-      );
-    }
+    // 配色：融合 EditorStyle 与代码块风格
+    final bgColor = isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF5F5F5);
+    final borderColor = isDark
+        ? Colors.white.withValues(alpha: 0.1)
+        : Colors.black.withValues(alpha: 0.1);
+    const textStyle = TextStyle(fontFamily: 'monospace', fontSize: 13, height: 1.5);
 
-    // 语言标签
-    Widget child = lang.isNotEmpty
+    // 构建代码内容
+    final codeContent = code.trim().isEmpty
+        ? _emptyContent(isDark, lang, bgColor, borderColor, textStyle)
+        : _highlightedCode(code, lang, isDark, textStyle);
+
+    // 组合：语言标签 + 代码
+    Widget inner = lang.isNotEmpty
         ? Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
-              _langBar(isDark, lang),
-              ClipRRect(
-                borderRadius: const BorderRadius.only(
-                    bottomLeft: Radius.circular(8),
-                    bottomRight: Radius.circular(8)),
-                child: content,
-              ),
+              _langBar(isDark, lang, borderColor),
+              codeContent,
             ],
           )
-        : content;
+        : codeContent;
 
-    // padding + key（用于 getRectsInSelection 定位）
-    child = Padding(key: _key, padding: padding, child: child);
+    // 整体圆角容器
+    Widget child = ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: bgColor,
+          border: Border.all(color: borderColor),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: inner,
+      ),
+    );
+
+    // padding（参照 Image/Diver 模式：Padding(key, padding)）
+    child = Padding(
+      key: _contentKey,
+      padding: padding,
+      child: child,
+    );
 
     // BlockSelectionContainer
     child = BlockSelectionContainer(
@@ -177,55 +196,82 @@ class _CodeBlockWidgetState extends State<_CodeBlockWidget>
       child: child,
     );
 
+    // 可选 action wrapper
+    if (widget.showActions && widget.actionBuilder != null) {
+      child = BlockComponentActionWrapper(
+        node: node,
+        actionBuilder: widget.actionBuilder!,
+        actionTrailingBuilder: widget.actionTrailingBuilder,
+        child: child,
+      );
+    }
+
     return child;
   }
 
-  Widget _emptyPlaceholder(bool isDark, String lang) => Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF0D1117) : const Color(0xFFF6F8FA),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.1)
-                : Colors.black.withValues(alpha: 0.1),
-          ),
+  /// 空的代码块占位
+  Widget _emptyContent(bool isDark, String lang, Color bg, Color border,
+      TextStyle style) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Text(
+        lang.isNotEmpty ? '$lang — empty' : 'Empty code block',
+        style: style.copyWith(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.35)
+              : Colors.black.withValues(alpha: 0.35),
+          fontStyle: FontStyle.italic,
         ),
-        child: Text(
-          lang.isNotEmpty ? '$lang (empty)' : 'Empty code block',
-          style: TextStyle(
-            fontFamily: 'monospace',
-            fontSize: 13,
-            fontStyle: FontStyle.italic,
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.4)
-                : Colors.black.withValues(alpha: 0.4),
-          ),
-        ),
-      );
+      ),
+    );
+  }
 
-  Widget _langBar(bool isDark, String lang) => Container(
-        width: double.infinity,
-        padding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        decoration: BoxDecoration(
-          color:
-              isDark ? const Color(0xFF161B22) : const Color(0xFFEBECF0),
-          borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(8),
-              topRight: Radius.circular(8)),
-        ),
-        child: Text(
-          lang,
-          style: TextStyle(
-            fontSize: 11,
-            fontFamily: 'monospace',
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.5)
-                : Colors.black.withValues(alpha: 0.5),
+  /// 带语法高亮的内容
+  Widget _highlightedCode(
+      String code, String lang, bool isDark, TextStyle style) {
+    final effectiveLang = lang.isNotEmpty ? lang : 'plaintext';
+    // HighlightView 限制最大宽度避免溢出
+    return SizedBox(
+      width: double.infinity,
+      child: HighlightView(
+        code,
+        language: effectiveLang,
+        theme: isDark ? _darkTheme : githubTheme,
+        padding: const EdgeInsets.all(16),
+        textStyle: style,
+      ),
+    );
+  }
+
+  /// 语言标签栏
+  Widget _langBar(bool isDark, String lang, Color borderColor) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.04)
+            : Colors.black.withValues(alpha: 0.03),
+        border: Border(bottom: BorderSide(color: borderColor)),
+        borderRadius:
+            const BorderRadius.vertical(top: Radius.circular(8)),
+      ),
+      child: Row(
+        children: [
+          Text(
+            lang,
+            style: TextStyle(
+              fontSize: 11,
+              fontFamily: 'monospace',
+              fontWeight: FontWeight.w600,
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.5)
+                  : Colors.black.withValues(alpha: 0.5),
+            ),
           ),
-        ),
-      );
+        ],
+      ),
+    );
+  }
 
   // ========== SelectableMixin ==========
 
@@ -247,7 +293,8 @@ class _CodeBlockWidgetState extends State<_CodeBlockWidget>
   @override
   Rect getBlockRect({bool shiftWithBaseOffset = false}) =>
       getRectsInSelection(Selection.invalid(),
-          shiftWithBaseOffset: shiftWithBaseOffset).first;
+              shiftWithBaseOffset: shiftWithBaseOffset)
+          .first;
 
   @override
   Rect? getCursorRectInPosition(Position position,
@@ -262,7 +309,7 @@ class _CodeBlockWidgetState extends State<_CodeBlockWidget>
     final renderBox = _renderBox;
     if (renderBox == null) return [];
     final parentBox = context.findRenderObject();
-    final innerBox = _key.currentContext?.findRenderObject();
+    final innerBox = _contentKey.currentContext?.findRenderObject();
     if (parentBox is RenderBox && innerBox is RenderBox) {
       return [
         (shiftWithBaseOffset
@@ -283,17 +330,21 @@ class _CodeBlockWidgetState extends State<_CodeBlockWidget>
           {bool shiftWithBaseOffset = false}) =>
       _renderBox!.localToGlobal(offset);
 
+  // ========== 主题 ==========
+
   static final _darkTheme = {
     'root': const TextStyle(
-        backgroundColor: Color(0xFF0D1117), color: Color(0xFFC9D1D9)),
+        backgroundColor: Color(0xFF1E1E1E), color: Color(0xFFD4D4D4)),
+    'keyword': const TextStyle(color: Color(0xFF569CD6)),
+    'string': const TextStyle(color: Color(0xFFCE9178)),
+    'number': const TextStyle(color: Color(0xFFB5CEA8)),
+    'title': const TextStyle(color: Color(0xFF569CD6)),
+    'function': const TextStyle(color: Color(0xFFDCDCAA)),
+    'built_in': const TextStyle(color: Color(0xFF4EC9B0)),
     'comment': const TextStyle(
-        color: Color(0xFF8B949E), fontStyle: FontStyle.italic),
-    'keyword': const TextStyle(color: Color(0xFFFF7B72)),
-    'string': const TextStyle(color: Color(0xFFA5D6FF)),
-    'number': const TextStyle(color: Color(0xFF79C0FF)),
-    'title': const TextStyle(color: Color(0xFFD2A8FF)),
-    'type': const TextStyle(color: Color(0xFFFFA657)),
-    'function': const TextStyle(color: Color(0xFFD2A8FF)),
-    'built_in': const TextStyle(color: Color(0xFFFFA657)),
+        color: Color(0xFF6A9955), fontStyle: FontStyle.italic),
+    'type': const TextStyle(color: Color(0xFF4EC9B0)),
+    'literal': const TextStyle(color: Color(0xFF569CD6)),
+    'meta': const TextStyle(color: Color(0xFF9B9B9B)),
   };
 }

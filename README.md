@@ -2,9 +2,9 @@
 **一个基于 Flutter 的跨平台 Markdown 编辑器**
 灵感来自 [MarkText](https://github.com/marktext/marktext)，使用 [AppFlowy Editor](https://github.com/AppFlowy-IO/appflowy-editor) 构建
 [
-]([https://github.com/xumyuan/MarkFlowy/actions/workflows/ci.yml](https://github.com/xumyuan/MarkFlowy/actions/workflows/ci.yml))
+](%5Bhttps://github.com/xumyuan/MarkFlowy/actions/workflows/ci.yml%5D(https://github.com/xumyuan/MarkFlowy/actions/workflows/ci.yml))
 [
-]([https://github.com/xumyuan/MarkFlowy/actions/workflows/release.yml](https://github.com/xumyuan/MarkFlowy/actions/workflows/release.yml))
+](%5Bhttps://github.com/xumyuan/MarkFlowy/actions/workflows/release.yml%5D(https://github.com/xumyuan/MarkFlowy/actions/workflows/release.yml))
 [
 ](LICENSE)
 ## [English](README_EN.md) | 中文
