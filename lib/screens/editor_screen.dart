@@ -35,6 +35,7 @@ import '../providers/editor_provider.dart';
 import '../providers/file_provider.dart';
 import '../providers/search_provider.dart';
 import '../services/command_bus.dart';
+import '../services/file_open_service.dart';
 import '../services/image_service.dart';
 import '../utils/strings.dart';
 import '../widgets/command_palette.dart';
@@ -103,6 +104,30 @@ class _EditorAreaState extends ConsumerState<_EditorArea> {
     // 延迟注册命令到 frame 结束后，避免在 widget 构建期间修改 provider
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _registerCommands();
+      // macOS: 处理文件关联打开（AppDelegate.swift → MethodChannel）
+      _handlePendingFileOpen();
+    });
+  }
+
+  /// 处理 macOS 文件关联打开事件
+  void _handlePendingFileOpen() {
+    final path = consumePendingOpenFile();
+    if (path == null) return;
+    final file = File(path);
+    if (!file.existsSync()) return;
+    
+    file.readAsString().then((content) {
+      final doc = Document(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        filePath: path,
+        filename: path.split('/').last,
+        content: content,
+        isSaved: true,
+        createdAt: DateTime.now(),
+        lastModifiedAt: DateTime.now(),
+      );
+      ref.read(tabBarProvider.notifier).openFileTab(doc);
+      ref.read(editorProvider.notifier).loadDocument(doc.id, content);
     });
   }
 

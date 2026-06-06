@@ -7,16 +7,19 @@
 /// 3. SettingsService (持久化设置)
 /// 4. ProviderScope (Riverpod 状态管理)
 /// 5. 启动 App
+/// 6. macOS 文件打开事件监听 (AppDelegate.swift → MethodChannel)
 library;
 
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'app.dart';
+import 'services/file_open_service.dart';
 import 'services/settings_service.dart';
 
 void main() async {
@@ -53,4 +56,17 @@ void main() async {
       child: const MarkdownEditorApp(),
     ),
   );
+
+  // macOS: 监听文件打开事件（AppDelegate.swift 通过 MethodChannel 发送）
+  if (Platform.isMacOS) {
+    const channel = MethodChannel('com.markflowy/file_open');
+    channel.setMethodCallHandler((call) async {
+      if (call.method == 'openFile') {
+        final path = call.arguments as String?;
+        if (path != null) {
+          setPendingOpenFile(path);
+        }
+      }
+    });
+  }
 }
