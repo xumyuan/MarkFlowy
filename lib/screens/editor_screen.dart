@@ -28,11 +28,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
+import '../models/app_settings.dart';
 import '../models/document.dart';
 import '../providers/editor_provider.dart';
 import '../providers/file_provider.dart';
 import '../providers/search_provider.dart';
 import '../services/command_bus.dart';
+import '../services/image_service.dart';
 import '../utils/strings.dart';
 import '../widgets/command_palette.dart';
 import '../widgets/common/responsive_layout.dart';
@@ -117,11 +119,35 @@ class _EditorAreaState extends ConsumerState<_EditorArea> {
       'file.close-tab': (_) => _closeCurrentTab(ref),
       'file.quick-open': (_) => ref.read(commandPaletteVisibleProvider.notifier).show(),
 
-      // ========== 编辑操作（部分由 appflowy_editor 内部处理） ==========
+      // ========== 编辑操作 ==========
       'edit.find': (_) => ref.read(searchProvider.notifier).openSearch(),
       'edit.find-next': (_) => ref.read(searchProvider.notifier).findNext(),
       'edit.find-previous': (_) => ref.read(searchProvider.notifier).findPrevious(),
       'edit.replace': (_) => ref.read(searchProvider.notifier).openReplace(),
+
+      // ========== 段落操作 ==========
+      'paragraph.heading-1': (_) => _insertMarkdownBlock('# ', 'heading1'),
+      'paragraph.heading-2': (_) => _insertMarkdownBlock('## ', 'heading2'),
+      'paragraph.heading-3': (_) => _insertMarkdownBlock('### ', 'heading3'),
+      'paragraph.heading-4': (_) => _insertMarkdownBlock('#### ', 'heading4'),
+      'paragraph.heading-5': (_) => _insertMarkdownBlock('##### ', 'heading5'),
+      'paragraph.heading-6': (_) => _insertMarkdownBlock('###### ', 'heading6'),
+      'paragraph.paragraph': (_) => _insertMarkdownBlock('', 'paragraph'),
+      'paragraph.code-fence': (_) => _insertMarkdownBlock('```\n\n```', 'code_block'),
+      'paragraph.quote-block': (_) => _insertMarkdownBlock('> ', 'quote'),
+      'paragraph.order-list': (_) => _insertMarkdownBlock('1. ', 'numbered_list'),
+      'paragraph.bullet-list': (_) => _insertMarkdownBlock('- ', 'bulleted_list'),
+      'paragraph.task-list': (_) => _insertMarkdownBlock('- [ ] ', 'todo_list'),
+      'paragraph.horizontal-line': (_) => _insertMarkdownBlock('\n---\n', 'divider'),
+      'paragraph.table': (_) => _handleInsertBlock('table'),
+      'paragraph.math-formula': (_) => _insertMarkdownBlock('\$\$\n\n\$\$', 'math'),
+      'paragraph.front-matter': (_) => _insertMarkdownBlock('---\n\n---\n', 'front_matter'),
+
+      // ========== 格式操作 ==========
+      'format.image': (_) => _handleInsertImage(),
+      'format.hyperlink': (_) => _handleInsertLink(),
+      'format.highlight': (_) => _handleFormatCommand('highlight'),
+      'format.clear-format': (_) => _handleFormatCommand('clear'),
 
       // ========== 视图操作 ==========
       'view.command-palette': (_) => ref.read(commandPaletteVisibleProvider.notifier).show(),
@@ -138,6 +164,99 @@ class _EditorAreaState extends ConsumerState<_EditorArea> {
       // ========== 窗口 ==========
       'window.toggle-full-screen': (_) => _toggleFullScreen(context),
     });
+  }
+
+  /// 插入 Markdown 块文本（源码模式下追加文本，WYSIWYG 模式下通过编辑器 API）
+  void _insertMarkdownBlock(String prefix, String blockType) {
+    final editorState = ref.read(editorProvider);
+    if (editorState.mode == EditorMode.wysiwyg) {
+      // WYSIWYG 模式：通过 appflowy_editor 事务插入对应节点
+      _insertWysiwygBlock(blockType);
+    } else {
+      // 源码模式：直接插入 markdown 文本
+      final content = _getCurrentContent();
+      final newContent = content.isEmpty
+          ? prefix
+          : '$content\n$prefix';
+      ref.read(editorProvider.notifier).updateMarkdown(newContent);
+    }
+  }
+
+  /// WYSIWYG 模式下插入块（使用 markdown 文本 + 重新解析）
+  void _insertWysiwygBlock(String blockType) {
+    final wysiwygState = _wysiwygKey.currentState;
+    if (wysiwygState == null) return;
+
+    String insertText;
+    switch (blockType) {
+      case 'heading1': insertText = '# '; break;
+      case 'heading2': insertText = '## '; break;
+      case 'heading3': insertText = '### '; break;
+      case 'heading4': insertText = '#### '; break;
+      case 'heading5': insertText = '##### '; break;
+      case 'heading6': insertText = '###### '; break;
+      case 'code_block': insertText = '```\n\n```'; break;
+      case 'quote': insertText = '> '; break;
+      case 'bulleted_list': insertText = '- '; break;
+      case 'numbered_list': insertText = '1. '; break;
+      case 'todo_list': insertText = '- [ ] '; break;
+      case 'divider': insertText = '\n---\n'; break;
+      case 'table': insertText = '\n| 列1 | 列2 | 列3 |\n| --- | --- | --- |\n| | | |\n'; break;
+      default: insertText = '\n';
+    }
+
+    final currentMarkdown = wysiwygState.getMarkdown();
+    final newMarkdown = currentMarkdown.isEmpty
+        ? insertText
+        : '$currentMarkdown\n$insertText';
+    wysiwygState.loadContent(newMarkdown);
+    ref.read(editorProvider.notifier).syncContent(newMarkdown);
+  }
+
+  /// 处理块插入（QuickInsert 通过工具栏触发）
+  void _handleInsertBlock(String type) {
+    final editorState = ref.read(editorProvider);
+    if (editorState.mode == EditorMode.wysiwyg) {
+      _insertWysiwygBlock(type);
+    } else {
+      _insertMarkdownBlock('', type);
+    }
+  }
+
+  /// 处理插入图片 — 打开文件选择器，调用 ImageService
+  Future<void> _handleInsertImage() async {
+    final imageService = ImageService();
+    final result = await imageService.pickImage(action: ImageInsertAction.path);
+    if (result == null) return;
+
+    // 插入图片 Markdown 语法
+    final editorState = ref.read(editorProvider);
+    if (editorState.mode == EditorMode.wysiwyg) {
+      // WYSIWYG：追加到文档末尾
+      final content = _getCurrentContent();
+      final newContent = content.isEmpty
+          ? result.toMarkdown()
+          : '$content\n\n${result.toMarkdown()}';
+      _wysiwygKey.currentState?.loadContent(newContent);
+      ref.read(editorProvider.notifier).syncContent(newContent);
+    } else {
+      final content = _getCurrentContent();
+      final newContent = content.isEmpty
+          ? result.toMarkdown()
+          : '$content\n\n${result.toMarkdown()}';
+      ref.read(editorProvider.notifier).updateMarkdown(newContent);
+    }
+  }
+
+  /// 处理插入链接
+  void _handleInsertLink() {
+    _insertMarkdownBlock('[链接文字](https://)', 'link');
+  }
+
+  /// 格式化命令（委托给 appflowy_editor 的 toolbar）
+  void _handleFormatCommand(String type) {
+    // appflowy_editor 通过 FloatingToolbar 或快捷键处理格式化
+    // 这里作为菜单入口记录命令
   }
 
   /// 循环切换标签
@@ -292,43 +411,52 @@ class _EditorAreaState extends ConsumerState<_EditorArea> {
 
   /// 格式化操作处理
   void _handleFormatAction(String type, EditorNotifier notifier) {
-    // 格式化操作主要由 appflowy_editor 的 FloatingToolbar 处理
-    // 工具栏按钮作为视觉入口，实际格式快捷键（⌘B/⌘I 等）由 appflowy 内部处理
+    // appflowy_editor 的 FloatingToolbar 处理快捷键格式化（⌘B/⌘I 等）
+    // 工具栏按钮作为视觉入口转发到 CommandBus
+    ref.read(commandBusProvider.notifier).execute('format.$type');
   }
 
   /// 块类型操作处理
   void _handleBlockAction(String type, EditorNotifier notifier) {
-    // 块类型切换由 FloatingToolbar 或 QuickInsert 处理
+    // 工具栏块按钮转发到段落命令
+    final commandId = QuickInsertMenu.labelToCommandId(type);
+    if (commandId.isNotEmpty) {
+      ref.read(commandBusProvider.notifier).execute(commandId);
+    }
   }
 
-  /// 插入操作处理
+  /// 插入操作处理（工具栏插入按钮：链接、图片、表格、分割线、emoji）
   void _handleInsertAction(String type, EditorNotifier notifier) {
-    if (type.startsWith('emoji:')) {
-      // 插入 Emoji（在源码模式下直接插入，WYSIWYG 下由 FloatingToolbar 处理）
-      final alias = type.substring(6);
-      final emoji = commonEmojis.where((e) => e.alias == alias).firstOrNull;
-      if (emoji != null) {
-        _insertTextAtCursor(':${emoji.alias}:');
-      }
+    switch (type) {
+      case 'image':
+        _handleInsertImage();
+        break;
+      case 'link':
+        _handleInsertLink();
+        break;
+      case 'table':
+        _handleInsertBlock('table');
+        break;
+      case 'hr':
+        _insertMarkdownBlock('\n---\n', 'divider');
+        break;
+      default:
+        if (type.startsWith('emoji:')) {
+          final alias = type.substring(6);
+          final emoji = commonEmojis.where((e) => e.alias == alias).firstOrNull;
+          if (emoji != null) {
+            _insertMarkdownBlock(':${emoji.alias}:', 'emoji');
+          }
+        }
     }
   }
 
   /// QuickInsert 处理
   void _handleQuickInsert(String label, EditorNotifier notifier) {
-    // 通过命令总线触发对应的段落命令
     final commandId = QuickInsertMenu.labelToCommandId(label);
-    ref.read(commandBusProvider.notifier).execute(commandId);
-  }
-
-  /// 在光标位置插入文本
-  void _insertTextAtCursor(String text) {
-    final editorState = ref.read(editorProvider);
-    if (editorState.mode == EditorMode.wysiwyg) {
-      // WYSIWYG 模式交由 appflowy_editor 处理
-      return;
+    if (commandId.isNotEmpty) {
+      ref.read(commandBusProvider.notifier).execute(commandId);
     }
-    final newContent = editorState.markdown + text;
-    ref.read(editorProvider.notifier).updateMarkdown(newContent);
   }
 
   /// 打开文件（通过文件选择器）

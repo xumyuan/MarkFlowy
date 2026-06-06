@@ -273,6 +273,44 @@ $htmlBody
         continue;
       }
 
+      // 图片 ![alt](url) — 在 PDF 中以文本标注替代
+      final imageMatch = RegExp(r'^!\[(.+?)\]\((.+?)\)$').firstMatch(line.trim());
+      if (imageMatch != null) {
+        final alt = imageMatch.group(1) ?? 'image';
+        final url = imageMatch.group(2) ?? '';
+        widgets.add(pw.Container(
+          margin: const pw.EdgeInsets.only(top: 4, bottom: 4),
+          padding: const pw.EdgeInsets.all(8),
+          decoration: const pw.BoxDecoration(
+            color: PdfColors.grey200,
+            borderRadius: pw.BorderRadius.all(pw.Radius.circular(4)),
+          ),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(
+                '[图片] $alt',
+                style: pw.TextStyle(
+                  fontSize: settings.fontSize * 0.9,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.grey600,
+                ),
+              ),
+              if (url.isNotEmpty)
+                pw.Text(
+                  url,
+                  style: pw.TextStyle(
+                    fontSize: settings.fontSize * 0.75,
+                    color: PdfColors.grey500,
+                  ),
+                ),
+            ],
+          ),
+        ));
+        i++;
+        continue;
+      }
+
       // H1-H6 标题
       final headingMatch = RegExp(r'^(#{1,6})\s+(.+)$').firstMatch(line);
       if (headingMatch != null) {
