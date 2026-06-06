@@ -109,18 +109,17 @@ class _EditorAreaState extends ConsumerState<_EditorArea> {
     });
   }
 
-  /// 处理 macOS 文件关联打开事件
+  /// 处理 macOS 文件关联打开事件（以及调试用默认测试文件）
   void _handlePendingFileOpen() {
     final path = consumePendingOpenFile();
-    if (path == null) return;
-    final file = File(path);
+    final file = File(path ?? '/tmp/test_codeblock.md');
     if (!file.existsSync()) return;
-    
+
     file.readAsString().then((content) {
       final doc = Document(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
-        filePath: path,
-        filename: path.split('/').last,
+        filePath: file.path,
+        filename: file.path.split('/').last,
         content: content,
         isSaved: true,
         createdAt: DateTime.now(),
