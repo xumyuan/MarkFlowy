@@ -84,6 +84,9 @@ class WysiwygEditorState extends State<WysiwygEditor> {
     final document = MarkdownUtils.createDocumentFromContent(
       widget.initialContent,
     );
+    // DEBUG: 验证的文档节点类型
+    final types = document.root.children.map((n) => n.type).toList();
+    print('[WYSIWYG] _initEditor: doc nodes=$types, contentLen=${widget.initialContent.length}');
     _editorState = EditorState(document: document);
 
     _scrollController = EditorScrollController(
@@ -120,20 +123,27 @@ class WysiwygEditorState extends State<WysiwygEditor> {
   @override
   void didUpdateWidget(WysiwygEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
+    print('[WYSIWYG] didUpdateWidget: _isInternalChange=$_isInternalChange oldLen=${oldWidget.initialContent.length} newLen=${widget.initialContent.length} lastLen=${_lastExternalContent.length}');
     // 当外部内容变化且不是内部编辑导致时，重新加载编辑器内容
     if (!_isInternalChange &&
         oldWidget.initialContent != widget.initialContent &&
         widget.initialContent != _lastExternalContent) {
+      print('[WYSIWYG] → calling _reloadContent');
       _reloadContent(widget.initialContent);
+    } else {
+      print('[WYSIWYG] → skipping _reloadContent');
     }
   }
 
   /// 重新加载编辑器内容（切换文档时）
   void _reloadContent(String markdown) {
+    print('[WYSIWYG] _reloadContent CALLED: contentLen=${markdown.length} startsWith="${markdown.substring(0, markdown.length.clamp(0, 60))}"');
     _lastExternalContent = markdown;
     _editorState.dispose();
     _scrollController.dispose();
     final document = MarkdownUtils.createDocumentFromContent(markdown);
+    final types = document.root.children.map((n) => n.type).toList();
+    print('[WYSIWYG] _reloadContent doc nodes: $types');
     _editorState = EditorState(document: document);
     _scrollController = EditorScrollController(
       editorState: _editorState,

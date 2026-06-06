@@ -127,6 +127,8 @@ class _CodeBlockWidgetState extends State<_CodeBlockWidget>
     final lang = node.attributes[CodeBlockKeys.language] ?? '';
     final code = node.attributes[CodeBlockKeys.code] ?? '';
     final showCode = code.trim().isEmpty ? ' ' : code;
+    final preview = code.length > 60 ? '${code.substring(0, 60)}...' : code;
+    print('[CODE_BLOCK] BUILD lang=$lang codeLen=${code.length} preview="$preview"');
 
     final bg = isDark ? _bgDark : _bgLight;
     final border = isDark ? _borderDark : _borderLight;
