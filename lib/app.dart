@@ -19,6 +19,7 @@ import 'pages/editor_page.dart';
 import 'pages/settings_page.dart';
 import 'providers/theme_provider.dart';
 import 'screens/welcome_screen.dart';
+import 'services/command_bus.dart';
 import 'services/menu_service.dart';
 
 /// 路由配置（参考 marktext router/index.js）
@@ -93,6 +94,13 @@ class MarkdownEditorApp extends ConsumerWidget {
     // 从 ThemeProvider 获取当前主题
     final themeData = ref.watch(currentThemeDataProvider);
 
+    // 创建菜单服务，将其命令回调连接到中心化 CommandBus
+    // 这样菜单栏的每一个点击都会被路由到已注册的命令处理器
+    final commandBus = ref.read(commandBusProvider.notifier);
+    final menuService = MenuService(
+      onCommand: (commandId) => commandBus.execute(commandId),
+    );
+
     final app = MaterialApp.router(
       title: 'MarkFlowy',
       debugShowCheckedModeBanner: false,
@@ -100,12 +108,13 @@ class MarkdownEditorApp extends ConsumerWidget {
       routerConfig: _router,
     );
 
-    // 仅在桌面端启用原生菜单栏
+    // CommandBus 全局快捷键 + 桌面端原生菜单栏
     if (_isDesktop) {
-      final menuService = ref.watch(menuServiceProvider);
-      return menuService.buildMenuBar(child: app);
+      return CommandBusWidget(
+        child: menuService.buildMenuBar(child: app),
+      );
     }
 
-    return app;
+    return CommandBusWidget(child: app);
   }
 }

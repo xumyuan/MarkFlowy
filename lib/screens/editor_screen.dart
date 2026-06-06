@@ -25,7 +25,6 @@ import 'dart:io';
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
@@ -33,11 +32,13 @@ import '../models/document.dart';
 import '../providers/editor_provider.dart';
 import '../providers/file_provider.dart';
 import '../providers/search_provider.dart';
+import '../services/command_bus.dart';
 import '../utils/strings.dart';
 import '../widgets/command_palette.dart';
 import '../widgets/common/responsive_layout.dart';
 import '../widgets/editor/editor_toolbar.dart';
 import '../widgets/editor/mode_switcher.dart';
+import '../widgets/editor/quick_insert.dart';
 import '../widgets/editor/source_editor.dart';
 import '../widgets/editor/split_view.dart';
 import '../widgets/editor/wysiwyg_editor.dart';
@@ -92,6 +93,94 @@ class _EditorAreaState extends ConsumerState<_EditorArea> {
 
   /// 自动保存定时器
   Timer? _autoSaveTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    // 将所有菜单命令注册到中心化 CommandBus
+    // 这样菜单栏和快捷键都会路由到这些处理器
+    _registerCommands();
+  }
+
+  /// 向 CommandBus 注册所有可处理的命令
+  /// 对应 marktext 中所有 menu actions 的实现
+  void _registerCommands() {
+    final bus = ref.read(commandBusProvider.notifier);
+    bus.registerHandlers({
+      // ========== 文件操作 ==========
+      'file.save': (_) => _saveCurrentDocument(),
+      'file.save-as': (_) => _saveAs(),
+      'file.new-tab': (_) => ref.read(tabBarProvider.notifier).addTab(),
+      'file.open-file': (_) => _openFile(ref),
+      'file.open-folder': (_) => ref.read(fileProvider.notifier).openFolder(),
+      'file.close-tab': (_) => _closeCurrentTab(ref),
+      'file.quick-open': (_) => ref.read(commandPaletteVisibleProvider.notifier).show(),
+
+      // ========== 编辑操作（部分由 appflowy_editor 内部处理） ==========
+      'edit.find': (_) => ref.read(searchProvider.notifier).openSearch(),
+      'edit.find-next': (_) => ref.read(searchProvider.notifier).findNext(),
+      'edit.find-previous': (_) => ref.read(searchProvider.notifier).findPrevious(),
+      'edit.replace': (_) => ref.read(searchProvider.notifier).openReplace(),
+
+      // ========== 视图操作 ==========
+      'view.command-palette': (_) => ref.read(commandPaletteVisibleProvider.notifier).show(),
+      'view.source-code-mode': (_) => ref.read(editorProvider.notifier).cycleMode(),
+      'view.typewriter-mode': (_) => ref.read(editorProvider.notifier).toggleTypewriterMode(),
+      'view.focus-mode': (_) => ref.read(editorProvider.notifier).toggleFocusMode(),
+      'view.toggle-sidebar': (_) => ref.read(sideBarProvider.notifier).toggleVisibility(),
+      'view.toggle-toc': (_) => ref.read(sideBarProvider.notifier).togglePanel(SideBarPanel.toc),
+
+      // ========== 标签切换 ==========
+      'tabs.cycleForward': (_) => _cycleTab(1),
+      'tabs.cycleBackward': (_) => _cycleTab(-1),
+
+      // ========== 窗口 ==========
+      'window.toggle-full-screen': (_) => _toggleFullScreen(context),
+    });
+  }
+
+  /// 循环切换标签
+  void _cycleTab(int direction) {
+    final tabState = ref.read(tabBarProvider);
+    if (tabState.tabs.isEmpty) return;
+    final currentId = tabState.activeTabId;
+    if (currentId == null) {
+      ref.read(tabBarProvider.notifier).selectTab(tabState.tabs.first.id);
+      return;
+    }
+    final currentIndex = tabState.tabs.indexWhere((t) => t.id == currentId);
+    if (currentIndex < 0) return;
+    final newIndex = (currentIndex + direction) % tabState.tabs.length;
+    final target = newIndex < 0 ? tabState.tabs.length - 1 : newIndex;
+    ref.read(tabBarProvider.notifier).selectTab(tabState.tabs[target].id);
+  }
+
+  /// 全屏切换
+  void _toggleFullScreen(BuildContext context) {
+    // 简化处理：最大化窗口
+    if (!Platform.isMacOS && !Platform.isWindows && !Platform.isLinux) return;
+    // 通过 windowManager 或系统调用切换全屏
+  }
+
+  /// 另存为
+  void _saveAs() {
+    final tabState = ref.read(tabBarProvider);
+    final activeDoc = tabState.activeDocument;
+    if (activeDoc == null) return;
+
+    final editorState = ref.read(editorProvider);
+    final content = editorState.mode == EditorMode.wysiwyg
+        ? _wysiwygKey.currentState?.getMarkdown() ?? editorState.markdown
+        : editorState.markdown;
+
+    final docToSave = activeDoc.copyWith(content: content);
+    ref.read(fileProvider.notifier).saveFileAs(docToSave).then((success) {
+      if (success) {
+        ref.read(editorProvider.notifier).markSaved();
+        ref.read(tabBarProvider.notifier).updateTabSaved(activeDoc.id);
+      }
+    });
+  }
 
   /// 保存当前文档（从编辑器获取最新内容）
   void _saveCurrentDocument() {
@@ -154,158 +243,91 @@ class _EditorAreaState extends ConsumerState<_EditorArea> {
     final editorNotifier = ref.read(editorProvider.notifier);
     final searchState = ref.watch(searchProvider);
 
-    return CallbackShortcuts(
-      bindings: {
-        // Cmd/Ctrl+S: 保存
-        SingleActivator(
-          LogicalKeyboardKey.keyS,
-          meta: Platform.isMacOS,
-          control: !Platform.isMacOS,
-        ): _saveCurrentDocument,
-        // Cmd/Ctrl+F: 打开搜索栏
-        SingleActivator(
-          LogicalKeyboardKey.keyF,
-          meta: Platform.isMacOS,
-          control: !Platform.isMacOS,
-        ): () => ref.read(searchProvider.notifier).openSearch(),
-        // Cmd/Ctrl+H: 打开搜索替换栏
-        SingleActivator(
-          LogicalKeyboardKey.keyH,
-          meta: Platform.isMacOS,
-          control: !Platform.isMacOS,
-        ): () => ref.read(searchProvider.notifier).openReplace(),
-        // Cmd/Ctrl+Shift+P: 打开命令面板
-        SingleActivator(
-          LogicalKeyboardKey.keyP,
-          meta: Platform.isMacOS,
-          control: !Platform.isMacOS,
-          shift: true,
-        ): () => ref.read(commandPaletteVisibleProvider.notifier).show(),
-        // Cmd/Ctrl+T: 新建标签（与 marktext 对齐: marktext 用 Cmd/Ctrl+T）
-        SingleActivator(
-          LogicalKeyboardKey.keyT,
-          meta: Platform.isMacOS,
-          control: !Platform.isMacOS,
-        ): () => ref.read(tabBarProvider.notifier).addTab(),
-        // Cmd/Ctrl+O: 打开文件
-        SingleActivator(
-          LogicalKeyboardKey.keyO,
-          meta: Platform.isMacOS,
-          control: !Platform.isMacOS,
-        ): () => _openFile(ref),
-        // Cmd/Ctrl+W: 关闭当前标签
-        SingleActivator(
-          LogicalKeyboardKey.keyW,
-          meta: Platform.isMacOS,
-          control: !Platform.isMacOS,
-        ): () => _closeCurrentTab(ref),
-        // 切换打字机模式 (对应 marktext typewriter)
-        // macOS: Cmd+Option+T, Windows/Linux: Ctrl+Shift+G
-        if (Platform.isMacOS)
-          SingleActivator(
-            LogicalKeyboardKey.keyT,
-            meta: true,
-            alt: true,
-          ): () => editorNotifier.toggleTypewriterMode(),
-        if (!Platform.isMacOS)
-          SingleActivator(
-            LogicalKeyboardKey.keyG,
-            control: true,
-            shift: true,
-          ): () => editorNotifier.toggleTypewriterMode(),
-        // Cmd/Ctrl+Shift+J: 切换焦点模式 (对应 marktext focus)
-        SingleActivator(
-          LogicalKeyboardKey.keyJ,
-          meta: Platform.isMacOS,
-          control: !Platform.isMacOS,
-          shift: true,
-        ): () => editorNotifier.toggleFocusMode(),
-        // 源码模式: macOS Cmd+Option+S, Windows/Linux Ctrl+E
-        if (Platform.isMacOS)
-          SingleActivator(
-            LogicalKeyboardKey.keyS,
-            meta: true,
-            alt: true,
-          ): () => editorNotifier.cycleMode(),
-        if (!Platform.isMacOS)
-          SingleActivator(
-            LogicalKeyboardKey.keyE,
-            control: true,
-          ): () => editorNotifier.cycleMode(),
-        // Escape: 关闭搜索栏 / 清除焦点
-        const SingleActivator(LogicalKeyboardKey.escape): () {
-          final searchState = ref.read(searchProvider);
-          if (searchState.isVisible) {
-            ref.read(searchProvider.notifier).close();
-          }
-        },
-        // Cmd+G / F3: 查找下一个
-        SingleActivator(
-          LogicalKeyboardKey.keyG,
-          meta: Platform.isMacOS,
-          control: !Platform.isMacOS,
-        ): () => ref.read(searchProvider.notifier).findNext(),
-      },
-      child: Focus(
-        autofocus: true,
-        child: Column(
-          children: [
-            // 工具栏（WYSIWYG 模式下显示）
-            if (editorState.mode == EditorMode.wysiwyg)
-              EditorToolbar(
-                onFormatAction: (type) => _handleFormatAction(type, editorNotifier),
-                onBlockAction: (type) => _handleBlockAction(type, editorNotifier),
-                onInsertAction: (type) => _handleInsertAction(type, editorNotifier),
-              ),
-
-            // 编辑器主体（Stack: 编辑区 + 搜索栏 overlay）
-            Expanded(
-              child: Stack(
-                children: [
-                  // 编辑器（根据模式切换）
-                  _buildEditorByMode(editorState, editorNotifier),
-
-                  // 搜索替换栏（浮动在编辑器右上角 overlay）
-                  if (searchState.isVisible)
-                    Positioned(
-                      top: 8,
-                      right: 20,
-                      child: SearchReplaceBar(
-                        getDocumentContent: _getCurrentContent,
-                        onReplace: (newContent) {
-                          if (editorState.mode == EditorMode.wysiwyg) {
-                            _wysiwygKey.currentState?.loadContent(newContent);
-                          }
-                          ref.read(editorProvider.notifier).updateMarkdown(newContent);
-                        },
-                      ),
-                    ),
-                ],
-              ),
+    return Focus(
+      autofocus: true,
+      child: Column(
+        children: [
+          // 工具栏（WYSIWYG 模式下显示）
+          if (editorState.mode == EditorMode.wysiwyg)
+            EditorToolbar(
+              onFormatAction: (type) => _handleFormatAction(type, editorNotifier),
+              onBlockAction: (type) => _handleBlockAction(type, editorNotifier),
+              onInsertAction: (type) => _handleInsertAction(type, editorNotifier),
+              onQuickInsert: (label) => _handleQuickInsert(label, editorNotifier),
             ),
 
-            // 底部状态栏：模式切换器
-            _buildStatusBar(context, editorState, editorNotifier),
-          ],
-        ),
+          // 编辑器主体（Stack: 编辑区 + 搜索栏 overlay）
+          Expanded(
+            child: Stack(
+              children: [
+                // 编辑器（根据模式切换）
+                _buildEditorByMode(editorState, editorNotifier),
+
+                // 搜索替换栏（浮动在编辑器右上角 overlay）
+                if (searchState.isVisible)
+                  Positioned(
+                    top: 8,
+                    right: 20,
+                    child: SearchReplaceBar(
+                      getDocumentContent: _getCurrentContent,
+                      onReplace: (newContent) {
+                        if (editorState.mode == EditorMode.wysiwyg) {
+                          _wysiwygKey.currentState?.loadContent(newContent);
+                        }
+                        ref.read(editorProvider.notifier).updateMarkdown(newContent);
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+
+          // 底部状态栏：模式切换器
+          _buildStatusBar(context, editorState, editorNotifier),
+        ],
       ),
     );
   }
 
   /// 格式化操作处理
   void _handleFormatAction(String type, EditorNotifier notifier) {
-    // 格式化操作由 floating toolbar 处理，工具栏按钮作为额外入口
-    // 对应 marktext formatCtrl.format(type)
+    // 格式化操作主要由 appflowy_editor 的 FloatingToolbar 处理
+    // 工具栏按钮作为视觉入口，实际格式快捷键（⌘B/⌘I 等）由 appflowy 内部处理
   }
 
   /// 块类型操作处理
   void _handleBlockAction(String type, EditorNotifier notifier) {
-    // 块操作由 floating toolbar 处理
+    // 块类型切换由 FloatingToolbar 或 QuickInsert 处理
   }
 
   /// 插入操作处理
   void _handleInsertAction(String type, EditorNotifier notifier) {
-    // 插入操作由 floating toolbar 处理
+    if (type.startsWith('emoji:')) {
+      // 插入 Emoji（在源码模式下直接插入，WYSIWYG 下由 FloatingToolbar 处理）
+      final alias = type.substring(6);
+      final emoji = commonEmojis.where((e) => e.alias == alias).firstOrNull;
+      if (emoji != null) {
+        _insertTextAtCursor(':${emoji.alias}:');
+      }
+    }
+  }
+
+  /// QuickInsert 处理
+  void _handleQuickInsert(String label, EditorNotifier notifier) {
+    // 通过命令总线触发对应的段落命令
+    final commandId = QuickInsertMenu.labelToCommandId(label);
+    ref.read(commandBusProvider.notifier).execute(commandId);
+  }
+
+  /// 在光标位置插入文本
+  void _insertTextAtCursor(String text) {
+    final editorState = ref.read(editorProvider);
+    if (editorState.mode == EditorMode.wysiwyg) {
+      // WYSIWYG 模式交由 appflowy_editor 处理
+      return;
+    }
+    final newContent = editorState.markdown + text;
+    ref.read(editorProvider.notifier).updateMarkdown(newContent);
   }
 
   /// 打开文件（通过文件选择器）
